@@ -128,7 +128,7 @@ export const ModelBrowser: React.FC = () => {
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
                     <h3 className="text-lg font-semibold text-gray-900">{model.name}</h3>
-                    <span className="text-sm text-gray-500">by {model.author}</span>
+                    <span className="text-sm text-gray-500">by {model.author} • {model.id}</span>
                   </div>
                   <p className="text-gray-600 mb-3">{model.description}</p>
                   <div className="flex items-center space-x-4 text-sm text-gray-500">

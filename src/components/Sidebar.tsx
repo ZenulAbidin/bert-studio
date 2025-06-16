@@ -14,14 +14,21 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', icon: LayoutDashboard, href: '#dashboard', current: true },
-  { name: 'Browse Models', icon: Search, href: '#browse', current: false },
-  { name: 'Downloads', icon: Download, href: '#downloads', current: false },
-  { name: 'Playground', icon: Play, href: '#playground', current: false },
-  { name: 'Settings', icon: Settings, href: '#settings', current: false },
+  { name: 'Dashboard', icon: LayoutDashboard, href: '/', current: true },
+  { name: 'Browse Models', icon: Search, href: '/browse', current: false },
+  { name: 'Downloads', icon: Download, href: '/downloads', current: false },
+  { name: 'Playground', icon: Play, href: '/playground', current: false },
+  { name: 'Settings', icon: Settings, href: '/settings', current: false },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
+  const handleNavClick = (href: string) => {
+    // For now, we'll use hash-based navigation since we only have one page
+    // In a real app, you'd use React Router
+    const section = href === '/' ? 'dashboard' : href.substring(1);
+    window.location.hash = section;
+  };
+
   return (
     <div className="h-full bg-gray-900 text-white">
       <div className="p-4">
@@ -41,11 +48,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
           {navigation.map((item) => {
             const Icon = item.icon;
             return (
-              <a
+              <button
                 key={item.name}
-                href={item.href}
+                onClick={() => handleNavClick(item.href)}
                 className={`
-                  group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
+                  group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors w-full text-left
                   ${item.current
                     ? 'bg-gray-800 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -54,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
               >
                 <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
                 {isOpen && item.name}
-              </a>
+              </button>
             );
           })}
         </div>
