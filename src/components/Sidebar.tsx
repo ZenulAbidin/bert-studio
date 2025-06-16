@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Search, 
@@ -14,7 +15,7 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', icon: LayoutDashboard, href: '/', current: true },
+  { name: 'Dashboard', icon: LayoutDashboard, href: '/', current: false },
   { name: 'Browse Models', icon: Search, href: '/browse', current: false },
   { name: 'Downloads', icon: Download, href: '/downloads', current: false },
   { name: 'Playground', icon: Play, href: '/playground', current: false },
@@ -22,12 +23,7 @@ const navigation = [
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
-  const handleNavClick = (href: string) => {
-    // For now, we'll use hash-based navigation since we only have one page
-    // In a real app, you'd use React Router
-    const section = href === '/' ? 'dashboard' : href.substring(1);
-    window.location.hash = section;
-  };
+  const location = useLocation();
 
   return (
     <div className="h-full bg-gray-900 text-white">
@@ -47,13 +43,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
         <div className="px-2 space-y-1">
           {navigation.map((item) => {
             const Icon = item.icon;
+            const isActive = location.pathname === item.href;
             return (
-              <button
+              <Link
                 key={item.name}
-                onClick={() => handleNavClick(item.href)}
+                to={item.href}
                 className={`
-                  group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors w-full text-left
-                  ${item.current
+                  group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
+                  ${isActive
                     ? 'bg-gray-800 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }
@@ -61,21 +58,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
               >
                 <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
                 {isOpen && item.name}
-              </button>
+              </Link>
             );
           })}
         </div>
       </nav>
-
-      {isOpen && (
-        <div className="absolute bottom-0 w-full p-4">
-          <div className="bg-gray-800 rounded-lg p-3">
-            <p className="text-xs text-gray-300">
-              Ready to explore BERT models and embeddings
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
