@@ -1,4 +1,7 @@
 venv
+**/__pycache__
+node_modules
+**/*.pyc
 # Logs
 logs
 *.log
