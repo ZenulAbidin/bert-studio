@@ -1,19 +1,40 @@
-
 import React, { useState, useEffect } from 'react';
 import { ModelBrowser } from './ModelBrowser';
 import { ModelManager } from './ModelManager';
 import { EmbeddingPlayground } from './EmbeddingPlayground';
 import { Download, Brain, Play, TrendingUp } from 'lucide-react';
+import apiClient from '@/lib/api';
+
+interface StatsData {
+  loaded_models: number;
+  available_models: number;
+  embeddings_generated: number;
+  playground_sessions: number;
+}
 
 export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [loadedModels, setLoadedModels] = useState<string[]>([]);
+  const [statsData, setStatsData] = useState<StatsData | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await apiClient.get<StatsData>("/stats");
+        setStatsData(response.data);
+      } catch (error) {
+        console.error("Failed to fetch stats:", error);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   const stats = [
-    { name: 'Loaded Models', value: loadedModels.length, icon: Brain, color: 'text-blue-600' },
-    { name: 'Available Models', value: '1,000+', icon: Download, color: 'text-green-600' },
-    { name: 'Embeddings Generated', value: '0', icon: TrendingUp, color: 'text-purple-600' },
-    { name: 'Playground Sessions', value: '1', icon: Play, color: 'text-orange-600' },
+    { name: 'Loaded Models', value: statsData?.loaded_models ?? loadedModels.length, icon: Brain, color: 'text-blue-600' },
+    { name: 'Available Models', value: statsData?.available_models ?? '1,000+', icon: Download, color: 'text-green-600' },
+    { name: 'Embeddings Generated', value: statsData?.embeddings_generated ?? '0', icon: TrendingUp, color: 'text-purple-600' },
+    { name: 'Playground Sessions', value: statsData?.playground_sessions ?? '1', icon: Play, color: 'text-orange-600' },
   ];
 
   const tabs = [

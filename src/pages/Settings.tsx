@@ -1,9 +1,75 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import apiClient from '@/lib/api';
+import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
 import { Settings as SettingsIcon, Server, Database, Bell, Shield } from 'lucide-react';
 
-const Settings = () => {
+interface Settings {
+  hf_token: string | null;
+  server_url: string;
+  model_cache_dir: string;
+  notifications: {
+    download_complete: boolean;
+    on_error: boolean;
+  };
+  security: {
+    verify_checksums: boolean;
+    sandbox_mode: boolean;
+  };
+}
+
+export const SettingsPage: React.FC = () => {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setIsLoading(true);
+      try {
+        const response = await apiClient.get<Settings>('/settings');
+        setSettings(response.data);
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+        toast.error("Could not load settings from the server.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    const [section, key] = name.split('.');
+
+    setSettings(prev => {
+      if (!prev) return null;
+
+      const newSettings = { ...prev };
+      if (key && (section === 'notifications' || section === 'security')) {
+        (newSettings[section] as any)[key] = type === 'checkbox' ? checked : value;
+      } else {
+        (newSettings as any)[name] = value;
+      }
+      return newSettings;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!settings) return;
+    try {
+      await apiClient.post('/settings', settings);
+      toast.success("Settings saved successfully!");
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      toast.error("Failed to save settings.");
+    }
+  };
+
+  if (isLoading || !settings) {
+    return <div>Loading settings...</div>;
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -27,7 +93,9 @@ const Settings = () => {
                   </label>
                   <input
                     type="password"
-                    placeholder="hf_..."
+                    name="hf_token"
+                    value={settings.hf_token || ''}
+                    onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -40,8 +108,9 @@ const Settings = () => {
                   </label>
                   <input
                     type="url"
-                    placeholder="http://localhost:8000"
-                    defaultValue="http://localhost:8000"
+                    name="server_url"
+                    value={settings.server_url}
+                    onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -61,20 +130,11 @@ const Settings = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="./models"
-                    defaultValue="./models"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    name="model_cache_dir"
+                    value={settings.model_cache_dir}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="auto-cleanup"
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="auto-cleanup" className="ml-2 text-sm text-gray-700">
-                    Automatically clean up unused models after 30 days
-                  </label>
                 </div>
               </div>
             </div>
@@ -90,7 +150,9 @@ const Settings = () => {
                   <input
                     type="checkbox"
                     id="download-notifications"
-                    defaultChecked
+                    name="notifications.download_complete"
+                    checked={settings.notifications.download_complete}
+                    onChange={handleInputChange}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="download-notifications" className="ml-2 text-sm text-gray-700">
@@ -101,7 +163,9 @@ const Settings = () => {
                   <input
                     type="checkbox"
                     id="error-notifications"
-                    defaultChecked
+                    name="notifications.on_error"
+                    checked={settings.notifications.on_error}
+                    onChange={handleInputChange}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="error-notifications" className="ml-2 text-sm text-gray-700">
@@ -122,7 +186,9 @@ const Settings = () => {
                   <input
                     type="checkbox"
                     id="verify-models"
-                    defaultChecked
+                    name="security.verify_checksums"
+                    checked={settings.security.verify_checksums}
+                    onChange={handleInputChange}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="verify-models" className="ml-2 text-sm text-gray-700">
@@ -133,6 +199,9 @@ const Settings = () => {
                   <input
                     type="checkbox"
                     id="sandbox-mode"
+                    name="security.sandbox_mode"
+                    checked={settings.security.sandbox_mode}
+                    onChange={handleInputChange}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="sandbox-mode" className="ml-2 text-sm text-gray-700">
@@ -144,7 +213,10 @@ const Settings = () => {
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
               Save Settings
             </button>
           </div>
@@ -154,4 +226,4 @@ const Settings = () => {
   );
 };
 
-export default Settings;
+export default SettingsPage;
