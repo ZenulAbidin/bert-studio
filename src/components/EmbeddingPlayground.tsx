@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
 import { toast } from 'sonner';
+import { ChartContainer } from "./ui/chart";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export const EmbeddingPlayground: React.FC<{ loadedModels: string[] }> = () => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -49,6 +51,18 @@ export const EmbeddingPlayground: React.FC<{ loadedModels: string[] }> = () => {
       setIsLoading(false);
     }
   };
+
+  // Utility to download embeddings as JSON
+  function handleDownload() {
+    if (!embeddings) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(embeddings, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", "embeddings.json");
+    document.body.appendChild(dlAnchorElem);
+    dlAnchorElem.click();
+    dlAnchorElem.remove();
+  }
 
   return (
     <div className="space-y-6">
@@ -106,10 +120,33 @@ export const EmbeddingPlayground: React.FC<{ loadedModels: string[] }> = () => {
         {embeddings && (
           <div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Generated Embeddings</h3>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap break-all">
-                {JSON.stringify(embeddings, null, 2)}
-              </pre>
+            <div className="flex flex-col md:flex-row gap-4 items-start">
+              {/* Chart Visualization */}
+              <div className="w-full md:w-2/3 h-64 bg-gray-50 rounded-lg p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={embeddings[0].map((value, idx) => ({ dim: idx, value }))}>
+                    <XAxis dataKey="dim" tick={false} label={{ value: 'Dimension', position: 'insideBottom', offset: -5 }} />
+                    <YAxis label={{ value: 'Value', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#2563eb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Download Button */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleDownload}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Download Embedding (JSON)
+                </button>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs text-gray-500">Show Raw Array</summary>
+                  <pre className="text-xs text-gray-700 whitespace-pre-wrap break-all max-h-40 overflow-auto bg-gray-100 rounded p-2 mt-2">
+                    {JSON.stringify(embeddings, null, 2)}
+                  </pre>
+                </details>
+              </div>
             </div>
           </div>
         )}

@@ -25,6 +25,14 @@ uvicorn main:app --reload
 
 The server will be available at [http://localhost:8000](http://localhost:8000).
 
+# If models fail to load
+
+Upgrade your `transformers` version:
+
+```bash
+pip install -U transformers
+```
+
 ## Endpoints
 
 - `GET /` — Health check

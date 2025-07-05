@@ -2,4 +2,5 @@ fastapi
 uvicorn
 torch
 transformers
-huggingface-hub 
+huggingface-hub
+pydantic

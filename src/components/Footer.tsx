@@ -75,7 +75,7 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <a 
-                  href="https://github.com/huggingface/transformers" 
+                  href="https://github.com/ZenulAbidin/bert-studio" 
                   className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
                   target="_blank"
                   rel="noopener noreferrer"

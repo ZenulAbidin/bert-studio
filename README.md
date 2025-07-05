@@ -1,4 +1,45 @@
-# Welcome to your Lovable project
+# BERT Studio - Model Playground
+
+A comprehensive playground for experimenting with BERT models and other transformer-based models from HuggingFace.
+
+## Features
+
+- **Model Management**: Browse, download, and load models from HuggingFace Hub
+- **Embedding Generation**: Create embeddings from text using various models
+- **Classification**: Perform text classification tasks
+- **Question Answering**: Extract answers from context
+- **Named Entity Recognition**: Identify entities in text
+- **Fill Mask**: Complete masked text
+- **Summarization**: Generate text summaries
+- **Feature Extraction**: Extract features from text
+- **Custom Tasks**: Execute custom code with security restrictions
+
+## Custom Tasks Feature
+
+The Custom Tasks playground allows you to run custom code with the following security restrictions:
+
+- Only `transformers` and `torch` imports are allowed
+- Code must be wrapped in functions
+- Input text is provided separately
+- Tokenizer and model loading code must be in separate text boxes
+- Function must be named `custom_function` and accept a text parameter
+
+### Example Usage
+
+```python
+# Tokenizer Code
+tokenizer = AutoTokenizer.from_pretrained("model-name")
+
+# Model Code  
+model = AutoModelForSequenceClassification.from_pretrained("model-name")
+
+# Function Code
+def custom_function(text):
+    inputs = tokenizer(text, return_tensors="pt")
+    outputs = model(**inputs)
+    probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
+    return {"probability": probabilities[0][1].item()}
+```
 
 ## Project info
 
