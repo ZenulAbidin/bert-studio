@@ -3,6 +3,7 @@ import apiClient from '@/lib/api';
 import { toast } from 'sonner';
 import { Alert } from './ui/alert';
 import { CodeEditor } from './ui/code-editor';
+import { TaskManager } from './TaskManager';
 import { Code, Play, AlertTriangle } from 'lucide-react';
 
 export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ loadedModels }) => {
@@ -90,6 +91,20 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Custom Tasks Playground</h2>
         <div className="flex gap-2">
+          <TaskManager
+            selectedModel={selectedModel}
+            tokenizerCode={tokenizerCode}
+            modelCode={modelCode}
+            functionCode={functionCode}
+            onLoadTask={(task) => {
+              setSelectedModel(task.model_id);
+              setTokenizerCode(task.tokenizer_code);
+              setModelCode(task.model_code);
+              setFunctionCode(task.function_code);
+              setResult(null);
+              setError(null);
+            }}
+          />
           <button
             onClick={loadExample}
             className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 flex items-center gap-2"

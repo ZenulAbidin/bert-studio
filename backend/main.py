@@ -9,7 +9,7 @@ from huggingface_hub import HfApi, hf_hub_download, hf_hub_url, get_hf_file_meta
 import time
 import os
 import numpy as np
-from database import db_manager, CustomTask
+from mongodb_database import mongodb_manager, CustomTask
 from datetime import datetime
 
 app = FastAPI(
@@ -762,7 +762,7 @@ class SaveTaskRequest(BaseModel):
     tags: Optional[str] = None
 
 class TaskInfo(BaseModel):
-    id: int
+    id: str
     name: str
     description: str
     model_id: str
@@ -798,7 +798,7 @@ def save_custom_task(request: SaveTaskRequest):
             updated_at=datetime.now().isoformat()
         )
         
-        task_id = db_manager.create_task(task)
+        task_id = mongodb_manager.create_task(task)
         return {"message": f"Task '{request.name}' saved successfully with ID {task_id}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to save task: {str(e)}")
@@ -809,7 +809,7 @@ def get_custom_tasks():
     Get all saved custom tasks.
     """
     try:
-        tasks = db_manager.get_all_tasks()
+        tasks = mongodb_manager.get_all_tasks()
         task_infos = [
             TaskInfo(
                 id=task.id,
@@ -830,12 +830,12 @@ def get_custom_tasks():
         raise HTTPException(status_code=400, detail=f"Failed to get tasks: {str(e)}")
 
 @app.get("/custom-tasks/{task_id}", response_model=TaskInfo)
-def get_custom_task(task_id: int):
+def get_custom_task(task_id: str):
     """
     Get a specific custom task by ID.
     """
     try:
-        task = db_manager.get_task_by_id(task_id)
+        task = mongodb_manager.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
@@ -855,7 +855,7 @@ def get_custom_task(task_id: int):
         raise HTTPException(status_code=400, detail=f"Failed to get task: {str(e)}")
 
 @app.put("/custom-tasks/{task_id}", response_model=MessageResponse)
-def update_custom_task(task_id: int, request: SaveTaskRequest):
+def update_custom_task(task_id: str, request: SaveTaskRequest):
     """
     Update an existing custom task.
     """
@@ -873,7 +873,7 @@ def update_custom_task(task_id: int, request: SaveTaskRequest):
             updated_at=datetime.now().isoformat()
         )
         
-        success = db_manager.update_task(task_id, task)
+        success = mongodb_manager.update_task(task_id, task)
         if not success:
             raise HTTPException(status_code=404, detail="Task not found")
         
@@ -882,12 +882,12 @@ def update_custom_task(task_id: int, request: SaveTaskRequest):
         raise HTTPException(status_code=400, detail=f"Failed to update task: {str(e)}")
 
 @app.delete("/custom-tasks/{task_id}", response_model=MessageResponse)
-def delete_custom_task(task_id: int):
+def delete_custom_task(task_id: str):
     """
     Delete a custom task.
     """
     try:
-        success = db_manager.delete_task(task_id)
+        success = mongodb_manager.delete_task(task_id)
         if not success:
             raise HTTPException(status_code=404, detail="Task not found")
         
@@ -901,7 +901,7 @@ def search_custom_tasks(query: str):
     Search custom tasks by name, description, or tags.
     """
     try:
-        tasks = db_manager.search_tasks(query)
+        tasks = mongodb_manager.search_tasks(query)
         task_infos = [
             TaskInfo(
                 id=task.id,
@@ -927,7 +927,7 @@ def get_tasks_by_model(model_id: str):
     Get all custom tasks for a specific model.
     """
     try:
-        tasks = db_manager.get_tasks_by_model(model_id)
+        tasks = mongodb_manager.get_tasks_by_model(model_id)
         task_infos = [
             TaskInfo(
                 id=task.id,
@@ -953,7 +953,7 @@ def export_custom_tasks():
     Export all custom tasks as JSON.
     """
     try:
-        return db_manager.export_tasks()
+        return mongodb_manager.export_tasks()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to export tasks: {str(e)}")
 
@@ -963,10 +963,47 @@ def import_custom_tasks(request: ImportTasksRequest):
     Import custom tasks from JSON.
     """
     try:
-        created_ids = db_manager.import_tasks(request.tasks)
+        created_ids = mongodb_manager.import_tasks(request.tasks)
         return {"message": f"Successfully imported {len(created_ids)} tasks"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to import tasks: {str(e)}")
+
+@app.get("/custom-tasks/stats")
+def get_task_stats():
+    """
+    Get statistics about custom tasks.
+    """
+    try:
+        return mongodb_manager.get_task_stats()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get task stats: {str(e)}")
+
+@app.get("/custom-tasks/tags/{tags}")
+def get_tasks_by_tags(tags: str):
+    """
+    Get tasks that have any of the specified tags.
+    """
+    try:
+        tag_list = [tag.strip() for tag in tags.split(',')]
+        tasks = mongodb_manager.get_tasks_by_tags(tag_list)
+        task_infos = [
+            TaskInfo(
+                id=task.id,
+                name=task.name,
+                description=task.description,
+                model_id=task.model_id,
+                tokenizer_code=task.tokenizer_code,
+                model_code=task.model_code,
+                function_code=task.function_code,
+                tags=task.tags,
+                created_at=task.created_at,
+                updated_at=task.updated_at
+            )
+            for task in tasks
+        ]
+        return TasksResponse(tasks=task_infos)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get tasks by tags: {str(e)}")
 
 class QARequest(BaseModel):
     question: str

@@ -24,6 +24,44 @@ The Custom Tasks playground allows you to run custom code with the following sec
 - Tokenizer and model loading code must be in separate text boxes
 - Function must be named `custom_function` and accept a text parameter
 
+### MongoDB Integration
+
+BERT Studio uses MongoDB for storing custom tasks with enterprise-grade features:
+
+- **Persistent Storage**: Tasks are saved to MongoDB database
+- **Advanced Search**: Full-text search across task names, descriptions, and tags
+- **Tag-based Filtering**: Organize tasks with custom tags
+- **Export/Import**: Share tasks between installations
+- **Statistics**: Track usage and popular tags
+- **Backup/Restore**: Full database backup and restore capabilities
+
+### MongoDB Setup
+
+1. **Install MongoDB** (if not already installed):
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install mongodb
+   
+   # macOS
+   brew install mongodb-community
+   
+   # Windows
+   # Download from https://www.mongodb.com/try/download/community
+   ```
+
+2. **Install Python Dependencies**:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+3. **Configure Connection** (optional):
+   ```bash
+   # Set environment variables for custom MongoDB connection
+   export MONGODB_CONNECTION_STRING="mongodb://your-mongodb-server:27017"
+   export MONGODB_DATABASE_NAME="bert_studio"
+   ```
+
 ### Example Usage
 
 ```python
@@ -40,6 +78,15 @@ def custom_function(text):
     probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
     return {"probability": probabilities[0][1].item()}
 ```
+
+### Task Management Features
+
+- **Save Tasks**: Save your custom code with name, description, and tags
+- **Load Tasks**: Quickly load previously saved tasks
+- **Search**: Find tasks by name, description, or tags
+- **Export/Import**: Share tasks between different installations
+- **Statistics**: View usage statistics and popular tags
+- **Model Filtering**: Filter tasks by the model they were created for
 
 ## Project info
 

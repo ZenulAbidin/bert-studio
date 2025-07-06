@@ -4,3 +4,6 @@ torch
 transformers
 huggingface-hub
 pydantic
+pymongo
+motor
+python-dotenv
