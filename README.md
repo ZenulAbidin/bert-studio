@@ -2,6 +2,9 @@
 
 A comprehensive playground for experimenting with BERT models and other transformer-based models from HuggingFace.
 
+![user interface](https://i.imgur.com/SJZIUq7.png)
+
+
 ## Features
 
 - **Model Management**: Browse, download, and load models from HuggingFace Hub
