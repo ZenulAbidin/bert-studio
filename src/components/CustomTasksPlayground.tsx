@@ -36,15 +36,29 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
       return;
     }
 
+    // Automatically add imports if missing
+    let finalTokenizerCode = tokenizerCode;
+    let finalModelCode = modelCode;
+    let finalFunctionCode = functionCode;
+    if (!/import\s+transformers/.test(tokenizerCode)) {
+      finalTokenizerCode = 'import transformers\n' + tokenizerCode;
+    }
+    if (!/import\s+transformers/.test(modelCode)) {
+      finalModelCode = 'import transformers\n' + modelCode;
+    }
+    if (!/import\s+torch/.test(functionCode)) {
+      finalFunctionCode = 'import torch\n' + functionCode;
+    }
+
     setIsLoading(true);
     setResult(null);
     setError(null);
 
     try {
       const response = await apiClient.post('/custom-task', {
-        tokenizer_code: tokenizerCode,
-        model_code: modelCode,
-        function_code: functionCode,
+        tokenizer_code: finalTokenizerCode,
+        model_code: finalModelCode,
+        function_code: finalFunctionCode,
         input_text: inputText,
         model_id: selectedModel,
       });
@@ -66,23 +80,9 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
   };
 
   const loadExample = () => {
-    setTokenizerCode(`tokenizer = AutoTokenizer.from_pretrained("${selectedModel}")`);
-    setModelCode(`model = AutoModelForSequenceClassification.from_pretrained("${selectedModel}")`);
-    setFunctionCode(`def custom_function(text):
-    # Tokenize the input text
-    inputs = tokenizer(text, return_tensors="pt")
-    
-    # Get model outputs
-    outputs = model(**inputs)
-    
-    # Apply softmax to get probabilities
-    probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    
-    # Return the probability of the positive class (index 1)
-    return {
-        "probability": probabilities[0][1].item(),
-        "confidence": float(probabilities.max().item())
-    }`);
+    setTokenizerCode(`import transformers\n\ntokenizer = AutoTokenizer.from_pretrained(model_id)`);
+    setModelCode(`import transformers\n\nmodel = AutoModelForSequenceClassification.from_pretrained(model_id)`);
+    setFunctionCode(`# 'tokenizer' and 'model' are already defined above\nimport torch\n\ndef custom_function(text):\n    # Tokenize the input text\n    inputs = tokenizer(text, return_tensors="pt")\n    \n    # Get model outputs\n    outputs = model(**inputs)\n    \n    # Apply softmax to get probabilities\n    probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)\n    \n    # Return the probability of the positive class (index 1)\n    return {\n        "probability": probabilities[0][1].item(),\n        "confidence": float(probabilities.max().item())\n    }`);
     setInputText('This is a sample text for testing the model.');
   };
 
@@ -134,7 +134,7 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
           <h4 className="font-medium">Custom Tasks Playground</h4>
           <p className="text-sm mt-1">
             Write custom Python code to process text with your models. Only 'transformers' and 'torch' imports are allowed. 
-            Your function must be named 'custom_function' and accept a text parameter. Use the "Load Example" button to get started.
+            Your function must be named 'custom_function' and accept a text parameter. <b>The variable <code>model_id</code> is available in the sandbox and contains the selected model's ID.</b> Use the "Load Example" button to get started.
           </p>
         </div>
       </Alert>
@@ -171,7 +171,7 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
             value={tokenizerCode}
             onChange={setTokenizerCode}
             language="python"
-            placeholder="tokenizer = AutoTokenizer.from_pretrained('model-name')"
+            placeholder={`import transformers\n\ntokenizer = AutoTokenizer.from_pretrained('model-name')`}
             height="120px"
           />
         </div>
@@ -185,7 +185,7 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
             value={modelCode}
             onChange={setModelCode}
             language="python"
-            placeholder="model = AutoModelForSequenceClassification.from_pretrained('model-name')"
+            placeholder={`import transformers\n\nmodel = AutoModelForSequenceClassification.from_pretrained('model-name')`}
             height="120px"
           />
         </div>
@@ -199,11 +199,7 @@ export const CustomTasksPlayground: React.FC<{ loadedModels: string[] }> = ({ lo
             value={functionCode}
             onChange={setFunctionCode}
             language="python"
-            placeholder={`def custom_function(text):
-    inputs = tokenizer(text, return_tensors="pt")
-    outputs = model(**inputs)
-    # Your custom logic here
-    return result`}
+            placeholder={`# 'tokenizer' and 'model' are already defined above\nimport torch\n\ndef custom_function(text):\n    inputs = tokenizer(text, return_tensors="pt")\n    outputs = model(**inputs)\n    # Your custom logic here\n    return result`}
             height="200px"
           />
         </div>

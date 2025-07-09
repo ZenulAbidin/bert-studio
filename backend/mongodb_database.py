@@ -85,7 +85,7 @@ class MongoDBManager:
     def create_task(self, task: CustomTask) -> str:
         """Create a new custom task and return its ID."""
         task_dict = self._task_to_dict(task)
-        del task_dict['_id']  # Let MongoDB generate the ID
+        task_dict.pop('_id', None)  # Let MongoDB generate the ID if present
         
         result = self.tasks_collection.insert_one(task_dict)
         return str(result.inserted_id)

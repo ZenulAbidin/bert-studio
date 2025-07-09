@@ -710,6 +710,9 @@ def _execute_custom_task(tokenizer_code: str, model_code: str, function_code: st
         restricted_globals['AutoModelForSequenceClassification'] = AutoModelForSequenceClassification
         restricted_globals['pipeline'] = pipeline
         
+        # Expose model_id to the sandbox
+        restricted_globals['model_id'] = model_id
+        
         # Execute tokenizer code
         exec(tokenizer_code, restricted_globals)
         if 'tokenizer' not in restricted_globals:
