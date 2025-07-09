@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Tag, Loader2, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Search, Tag, Loader2, ChevronLeft, ChevronRight, X, Upload } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { toast } from 'sonner';
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 // Custom hook to debounce the search input
 function useDebounce<T>(value: T, delay: number): T {
@@ -29,6 +30,8 @@ export const ModelBrowser: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [allModels, setAllModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [manualModelId, setManualModelId] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // State is now derived from the URL search parameters
   const selectedTag = searchParams.get('tag');
@@ -111,9 +114,104 @@ export const ModelBrowser: React.FC = () => {
     }
   };
 
+  const handleManualLoad = async () => {
+    if (!manualModelId.trim()) {
+      toast.error('Please enter a model ID.');
+      return;
+    }
+    try {
+      let alreadyDownloaded = false;
+      // Check if model is already downloaded
+      const downloadedResp = await apiClient.get('/models/downloaded');
+      const modelStatus = downloadedResp.data[manualModelId.trim()];
+      if (modelStatus && modelStatus.status === 'completed') {
+        alreadyDownloaded = true;
+      }
+      if (alreadyDownloaded) {
+        toast.info(`Model already downloaded. Loading ${manualModelId} into memory...`);
+      } else {
+        toast.info(`Downloading ${manualModelId} from Hugging Face...`);
+        await apiClient.post('/models/download', { model_id: manualModelId.trim() });
+      }
+      // Poll for download status if not already downloaded
+      if (!alreadyDownloaded) {
+        const pollInterval = 3000; // 3 seconds
+        const maxAttempts = 40; // 2 minutes
+        let attempts = 0;
+        let status = '';
+        while (attempts < maxAttempts) {
+          const resp = await apiClient.get('/models/downloaded');
+          const modelStatus = resp.data[manualModelId.trim()];
+          if (modelStatus && modelStatus.status === 'completed') {
+            status = 'completed';
+            break;
+          } else if (modelStatus && modelStatus.status === 'failed') {
+            status = 'failed';
+            break;
+          }
+          await new Promise(res => setTimeout(res, pollInterval));
+          attempts++;
+        }
+        if (status === 'failed') {
+          toast.error(`Download failed for ${manualModelId}`);
+          return;
+        } else if (status !== 'completed') {
+          toast.error(`Timed out waiting for download of ${manualModelId}`);
+          return;
+        }
+        toast.info(`Loading ${manualModelId} into memory...`);
+      }
+      // Now load the model
+      await apiClient.post('/models/load', { model_id: manualModelId.trim() });
+      toast.success(`Model ${manualModelId} loaded successfully!`);
+      setManualModelId('');
+      setIsDialogOpen(false);
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || error?.message || `Failed to download or load ${manualModelId}`;
+      toast.error(msg);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Browse Hugging Face Models</h2>
+      <h2 className="text-xl font-semibold flex items-center justify-between">
+        <span>Browse Hugging Face Models</span>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <button
+              className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-200 ml-4"
+              style={{ minWidth: 120 }}
+            >
+              Advanced Load
+            </button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Advanced Model Load</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 mt-2">
+              <input
+                type="text"
+                value={manualModelId}
+                onChange={e => setManualModelId(e.target.value)}
+                placeholder="author/model (e.g. jpwahle/longformer-base-plagiarism-detection)"
+                className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                style={{ minWidth: 340 }}
+              />
+              <span className="text-xs text-gray-500">Enter the full model ID in the format <code>author/model</code> (e.g. <b>jpwahle/longformer-base-plagiarism-detection</b>).</span>
+              <button
+                onClick={handleManualLoad}
+                className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200 flex items-center gap-1"
+                title="Manually load a HuggingFace model by ID"
+              >
+                <Upload className="h-4 w-4" />
+                Load Model
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </h2>
 
       {/* Search and Filter */}
       <div className="space-y-4">
