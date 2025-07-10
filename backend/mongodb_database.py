@@ -20,6 +20,7 @@ class CustomTask:
     created_at: str
     updated_at: str
     tags: Optional[str] = None
+    batch_mode: Optional[bool] = None
 
 class MongoDBManager:
     def __init__(self, connection_string: str = "mongodb://localhost:27017", database_name: str = "bert_studio"):

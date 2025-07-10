@@ -119,7 +119,7 @@ def _download_model_task(model_id: str):
         })
         # Load model and tokenizer after download
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModel.from_pretrained(model_id)
+        model = AutoModel.from_pretrained(model_id, device_map='cpu')
         if model_id not in loaded_models:
             loaded_models[model_id] = model
             loaded_tokenizers[model_id] = tokenizer
@@ -149,7 +149,7 @@ def _load_model_task(model_id: str):
         
         # Load model
         loading_models[model_id]["progress"] = 75
-        model = AutoModel.from_pretrained(model_id)
+        model = AutoModel.from_pretrained(model_id, device_map='cpu')
         
         # Store in memory
         loaded_models[model_id] = model
@@ -321,6 +321,36 @@ def read_root():
 def embed_texts(request: EmbeddingRequest):
     """
     Generate embeddings for a list of input texts using a loaded HuggingFace model.
+    """
+    model_id = request.model or "bert-base-uncased"
+    try:
+        tokenizer, model = get_model_and_tokenizer(model_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Model loading failed: {str(e)}")
+    with torch.no_grad():
+        encoded = tokenizer(request.texts, padding=True, truncation=True, return_tensors="pt")
+        output = model(**encoded)
+        attention_mask = encoded["attention_mask"]
+        last_hidden = output.last_hidden_state
+        mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden.size()).float()
+        sum_hidden = torch.sum(last_hidden * mask_expanded, 1)
+        sum_mask = torch.clamp(mask_expanded.sum(1), min=1e-9)
+        embeddings = sum_hidden / sum_mask
+        embeddings_list = embeddings.cpu().tolist()
+    stats_store["embeddings_generated"] += len(request.texts)
+    return {"embeddings": embeddings_list}
+
+class BatchEmbeddingRequest(BaseModel):
+    texts: List[str]
+    model: Optional[str] = "bert-base-uncased"
+
+class BatchEmbeddingResponse(BaseModel):
+    embeddings: List[List[float]]
+
+@app.post("/embed/batch", response_model=BatchEmbeddingResponse)
+def embed_texts_batch(request: BatchEmbeddingRequest):
+    """
+    Generate embeddings for a batch of input texts using a loaded HuggingFace model.
     """
     model_id = request.model or "bert-base-uncased"
     try:
@@ -573,6 +603,17 @@ class CustomTaskResponse(BaseModel):
     result: Any
     error: Optional[str] = None
 
+class BatchCustomTaskRequest(BaseModel):
+    tokenizer_code: str
+    model_code: str
+    function_code: str
+    input_texts: List[str]
+    model_id: str
+
+class BatchCustomTaskResponse(BaseModel):
+    results: List[Any]
+    errors: List[Optional[str]]
+
 def _validate_and_sanitize_code(code: str, code_type: str) -> str:
     """
     Validate and sanitize code to ensure security.
@@ -754,6 +795,130 @@ def execute_custom_task(request: CustomTaskRequest):
     except Exception as e:
         return {"result": None, "error": str(e)}
 
+@app.post("/custom-task/batch", response_model=BatchCustomTaskResponse)
+def execute_custom_task_batch(request: BatchCustomTaskRequest):
+    """
+    Execute a custom task for a batch of input texts with security restrictions, efficiently in one call.
+    The provided function_code must define custom_function(input_texts: List[str]) -> List[Any].
+    """
+    try:
+        # Validate and sanitize code
+        tokenizer_code = _validate_and_sanitize_code(request.tokenizer_code, "tokenizer")
+        model_code = _validate_and_sanitize_code(request.model_code, "model")
+        function_code = _validate_and_sanitize_code(request.function_code, "function")
+
+        # Create a restricted execution environment
+        restricted_globals: Dict[str, Any] = {}
+        # Add basic builtins (same as _execute_custom_task)
+        restricted_globals.update({
+            'print': print,
+            'len': len,
+            'str': str,
+            'int': int,
+            'float': float,
+            'list': list,
+            'dict': dict,
+            'tuple': tuple,
+            'set': set,
+            'bool': bool,
+            'type': type,
+            'isinstance': isinstance,
+            'range': range,
+            'enumerate': enumerate,
+            'zip': zip,
+            'map': map,
+            'filter': filter,
+            'sum': sum,
+            'max': max,
+            'min': min,
+            'abs': abs,
+            'round': round,
+            'sorted': sorted,
+            'reversed': reversed,
+            'any': any,
+            'all': all,
+            'chr': chr,
+            'ord': ord,
+            'hex': hex,
+            'oct': oct,
+            'bin': bin,
+            'format': format,
+            'repr': repr,
+            'ascii': ascii,
+            'hash': hash,
+            'id': id,
+            'callable': callable,
+            'getattr': getattr,
+            'hasattr': hasattr,
+            'setattr': setattr,
+            'delattr': delattr,
+            'property': property,
+            'super': super,
+            'object': object,
+            'Exception': Exception,
+            'ValueError': ValueError,
+            'TypeError': TypeError,
+            'IndexError': IndexError,
+            'KeyError': KeyError,
+            'AttributeError': AttributeError,
+            'RuntimeError': RuntimeError,
+            'ImportError': ImportError,
+            'NameError': NameError,
+            'UnboundLocalError': UnboundLocalError,
+            'ZeroDivisionError': ZeroDivisionError,
+            'OverflowError': OverflowError,
+            'FloatingPointError': FloatingPointError,
+            'AssertionError': AssertionError,
+            'NotImplementedError': NotImplementedError,
+            'ArithmeticError': ArithmeticError,
+            'BufferError': BufferError,
+            'EOFError': EOFError,
+            'LookupError': LookupError,
+            'MemoryError': MemoryError,
+            'OSError': OSError,
+            'ReferenceError': ReferenceError,
+            'SyntaxError': SyntaxError,
+            'SystemError': SystemError,
+            'Warning': Warning,
+            'UserWarning': UserWarning,
+            'DeprecationWarning': DeprecationWarning,
+            'PendingDeprecationWarning': PendingDeprecationWarning,
+            'SyntaxWarning': SyntaxWarning,
+            'RuntimeWarning': RuntimeWarning,
+            'FutureWarning': FutureWarning,
+            'ImportWarning': ImportWarning,
+            'UnicodeWarning': UnicodeWarning,
+            'BytesWarning': BytesWarning,
+            'ResourceWarning': ResourceWarning,
+        })
+        # Add allowed modules
+        restricted_globals['torch'] = torch
+        restricted_globals['transformers'] = transformers
+        restricted_globals['AutoTokenizer'] = AutoTokenizer
+        restricted_globals['AutoModel'] = AutoModel
+        restricted_globals['AutoModelForSequenceClassification'] = AutoModelForSequenceClassification
+        restricted_globals['pipeline'] = pipeline
+        restricted_globals['model_id'] = request.model_id
+        # Execute tokenizer and model code
+        exec(tokenizer_code, restricted_globals)
+        if 'tokenizer' not in restricted_globals:
+            raise ValueError("Tokenizer code must assign to variable 'tokenizer'")
+        exec(model_code, restricted_globals)
+        if 'model' not in restricted_globals:
+            raise ValueError("Model code must assign to variable 'model'")
+        # Create the function
+        exec(function_code, restricted_globals)
+        if 'custom_function' not in restricted_globals:
+            raise ValueError("Function code must define a function named 'custom_function'")
+        custom_function = restricted_globals['custom_function']
+        # Call the function ONCE with the whole batch
+        results = custom_function(request.input_texts)
+        if not isinstance(results, list):
+            raise ValueError("custom_function must return a list of results, one per input text")
+        return {"results": results, "errors": [None] * len(results)}
+    except Exception as e:
+        return {"results": [None] * len(request.input_texts), "errors": [str(e)] * len(request.input_texts)}
+
 # --- Custom Task Management Endpoints ---
 class SaveTaskRequest(BaseModel):
     name: str
@@ -763,6 +928,7 @@ class SaveTaskRequest(BaseModel):
     model_code: str
     function_code: str
     tags: Optional[str] = None
+    batch_mode: Optional[bool] = None
 
 class TaskInfo(BaseModel):
     id: str
@@ -775,6 +941,7 @@ class TaskInfo(BaseModel):
     tags: Optional[str]
     created_at: str
     updated_at: str
+    batch_mode: Optional[bool] = None
 
 class TasksResponse(BaseModel):
     tasks: List[TaskInfo]
@@ -798,9 +965,9 @@ def save_custom_task(request: SaveTaskRequest):
             function_code=request.function_code,
             tags=request.tags,
             created_at=datetime.now().isoformat(),
-            updated_at=datetime.now().isoformat()
+            updated_at=datetime.now().isoformat(),
+            batch_mode=request.batch_mode,
         )
-        
         task_id = mongodb_manager.create_task(task)
         return {"message": f"Task '{request.name}' saved successfully with ID {task_id}"}
     except Exception as e:
@@ -824,7 +991,8 @@ def get_custom_tasks():
                 function_code=task.function_code,
                 tags=task.tags,
                 created_at=task.created_at,
-                updated_at=task.updated_at
+                updated_at=task.updated_at,
+                batch_mode=task.batch_mode,
             )
             for task in tasks
         ]
@@ -841,7 +1009,6 @@ def get_custom_task(task_id: str):
         task = mongodb_manager.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
         return TaskInfo(
             id=task.id,
             name=task.name,
@@ -852,7 +1019,8 @@ def get_custom_task(task_id: str):
             function_code=task.function_code,
             tags=task.tags,
             created_at=task.created_at,
-            updated_at=task.updated_at
+            updated_at=task.updated_at,
+            batch_mode=task.batch_mode,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to get task: {str(e)}")
@@ -873,13 +1041,12 @@ def update_custom_task(task_id: str, request: SaveTaskRequest):
             function_code=request.function_code,
             tags=request.tags,
             created_at="",  # Will be preserved
-            updated_at=datetime.now().isoformat()
+            updated_at=datetime.now().isoformat(),
+            batch_mode=request.batch_mode,
         )
-        
         success = mongodb_manager.update_task(task_id, task)
         if not success:
             raise HTTPException(status_code=404, detail="Task not found")
-        
         return {"message": f"Task '{request.name}' updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update task: {str(e)}")
@@ -916,7 +1083,8 @@ def search_custom_tasks(query: str):
                 function_code=task.function_code,
                 tags=task.tags,
                 created_at=task.created_at,
-                updated_at=task.updated_at
+                updated_at=task.updated_at,
+                batch_mode=task.batch_mode,
             )
             for task in tasks
         ]
@@ -942,7 +1110,8 @@ def get_tasks_by_model(model_id: str):
                 function_code=task.function_code,
                 tags=task.tags,
                 created_at=task.created_at,
-                updated_at=task.updated_at
+                updated_at=task.updated_at,
+                batch_mode=task.batch_mode,
             )
             for task in tasks
         ]
@@ -1000,7 +1169,8 @@ def get_tasks_by_tags(tags: str):
                 function_code=task.function_code,
                 tags=task.tags,
                 created_at=task.created_at,
-                updated_at=task.updated_at
+                updated_at=task.updated_at,
+                batch_mode=task.batch_mode,
             )
             for task in tasks
         ]

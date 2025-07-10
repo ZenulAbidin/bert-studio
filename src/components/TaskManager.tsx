@@ -20,6 +20,7 @@ interface TaskInfo {
   tags?: string;
   created_at: string;
   updated_at: string;
+  batch_mode?: boolean;
 }
 
 interface TaskManagerProps {
@@ -27,6 +28,7 @@ interface TaskManagerProps {
   tokenizerCode: string;
   modelCode: string;
   functionCode: string;
+  batchMode: boolean;
   onLoadTask: (task: TaskInfo) => void;
 }
 
@@ -35,6 +37,7 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
   tokenizerCode,
   modelCode,
   functionCode,
+  batchMode,
   onLoadTask,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -79,6 +82,7 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
         model_code: modelCode,
         function_code: functionCode,
         tags: taskTags,
+        batch_mode: batchMode,
       });
 
       toast.success('Task saved successfully!');
@@ -166,7 +170,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
           <DialogHeader>
             <DialogTitle>Custom Tasks Manager</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -199,7 +202,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
                 </Button>
               </div>
             </div>
-
             <div className="space-y-2">
               {isLoading ? (
                 <div className="text-center py-8">Loading tasks...</div>
@@ -215,6 +217,9 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-medium">{task.name}</h3>
                           <Badge variant="secondary">{task.model_id}</Badge>
+                          {task.batch_mode && (
+                            <Badge className="bg-blue-100 text-blue-700">Batch</Badge>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600 mb-2">{task.description}</p>
                         {task.tags && (
