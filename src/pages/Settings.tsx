@@ -3,6 +3,7 @@ import apiClient from '@/lib/api';
 import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
 import { Settings as SettingsIcon, Server, Database, Bell, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface Settings {
   hf_token: string | null;
@@ -21,6 +22,7 @@ interface Settings {
 export const SettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -208,6 +210,12 @@ export const SettingsPage: React.FC = () => {
                     Run models in sandbox mode (experimental)
                   </label>
                 </div>
+                <button
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  onClick={() => navigate('/api-keys')}
+                >
+                  Manage API Keys
+                </button>
               </div>
             </div>
           </div>

@@ -43,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
   const location = useLocation();
 
   return (
-    <div className="h-full bg-gray-900 text-white flex flex-col">
+    <div className={`fixed left-0 top-0 h-full ${isOpen ? 'w-64' : 'w-16'} bg-gray-900 text-white flex flex-col z-40 transition-all duration-300`}>
       <div className="p-4">
         <div className="flex items-center space-x-3">
           <Brain className="h-8 w-8 text-blue-400" />
@@ -67,14 +67,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                 key={item.name}
                 to={item.href}
                 className={`
-                  group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
+                  group flex items-center ${isOpen ? 'px-3' : 'justify-center'} py-2 text-sm font-medium rounded-md transition-colors
                   ${isActive
                     ? 'bg-gray-800 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }
                 `}
               >
-                <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                <Icon className={`${isOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0`} />
                 {isOpen && item.name}
               </Link>
             );
@@ -91,14 +91,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                     key={activity.name}
                     to={activity.href}
                     className={`
-                      group flex items-center px-3 py-2 text-sm rounded-md transition-colors
+                      group flex items-center ${isOpen ? 'px-3' : 'justify-center'} py-2 text-sm rounded-md transition-colors
                       ${isActive
                         ? 'bg-gray-800 text-white'
                         : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                       }
                     `}
                   >
-                    <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                    <Icon className={`${isOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0`} />
                     {isOpen && activity.name}
                   </Link>
                 );
@@ -106,18 +106,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             </div>
           </div>
         </div>
-        <div className="px-2 pb-4">
+        {/* Settings button at the bottom of the sidebar content */}
+        <div className="px-2 mt-auto mb-4">
           <Link
             to="/settings"
             className={`
-              group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
+              group flex items-center ${isOpen ? 'px-3' : 'justify-center'} py-2 text-sm font-medium rounded-md transition-colors
               ${location.pathname === '/settings'
                 ? 'bg-gray-800 text-white'
                 : 'text-gray-300 hover:bg-gray-700 hover:text-white'
               }
             `}
           >
-            <Settings className="mr-3 h-5 w-5 flex-shrink-0" />
+            <Settings className={`${isOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0`} />
             {isOpen && 'Settings'}
           </Link>
         </div>

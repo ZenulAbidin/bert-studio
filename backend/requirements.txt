@@ -5,7 +5,7 @@ transformers
 huggingface-hub
 pydantic
 pymongo
-motor
 python-dotenv
 accelerate
-bson
+Pillow
+itsdangerous

@@ -17,6 +17,9 @@ import PlaygroundFillMask from './pages/PlaygroundFillMask';
 import PlaygroundSummarization from './pages/PlaygroundSummarization';
 import PlaygroundFeatures from './pages/PlaygroundFeatures';
 import PlaygroundCustomTasks from './pages/PlaygroundCustomTasks';
+import ApiKeysPage from './pages/ApiKeys';
+import LoginPage from './pages/Login';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const queryClient = new QueryClient();
 
@@ -27,19 +30,21 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/browse" element={<Browse />} />
-          <Route path="/downloads" element={<Downloads />} />
-          <Route path="/playground/embedding" element={<PlaygroundEmbedding />} />
-          <Route path="/playground/classification" element={<PlaygroundClassification />} />
-          <Route path="/playground/qa" element={<PlaygroundQA />} />
-          <Route path="/playground/ner" element={<PlaygroundNER />} />
-          <Route path="/playground/fill-mask" element={<PlaygroundFillMask />} />
-          <Route path="/playground/summarization" element={<PlaygroundSummarization />} />
-          <Route path="/playground/features" element={<PlaygroundFeatures />} />
-          <Route path="/playground/custom-tasks" element={<PlaygroundCustomTasks />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<NotFound />} />
+          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/browse" element={<ProtectedRoute><Browse /></ProtectedRoute>} />
+          <Route path="/downloads" element={<ProtectedRoute><Downloads /></ProtectedRoute>} />
+          <Route path="/playground/embedding" element={<ProtectedRoute><PlaygroundEmbedding /></ProtectedRoute>} />
+          <Route path="/playground/classification" element={<ProtectedRoute><PlaygroundClassification /></ProtectedRoute>} />
+          <Route path="/playground/qa" element={<ProtectedRoute><PlaygroundQA /></ProtectedRoute>} />
+          <Route path="/playground/ner" element={<ProtectedRoute><PlaygroundNER /></ProtectedRoute>} />
+          <Route path="/playground/fill-mask" element={<ProtectedRoute><PlaygroundFillMask /></ProtectedRoute>} />
+          <Route path="/playground/summarization" element={<ProtectedRoute><PlaygroundSummarization /></ProtectedRoute>} />
+          <Route path="/playground/features" element={<ProtectedRoute><PlaygroundFeatures /></ProtectedRoute>} />
+          <Route path="/playground/custom-tasks" element={<ProtectedRoute><PlaygroundCustomTasks /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/api-keys" element={<ProtectedRoute><ApiKeysPage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

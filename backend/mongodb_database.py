@@ -2,10 +2,10 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
-from pymongo import MongoClient
-from pymongo.collection import Collection
-from pymongo.database import Database
-from bson import ObjectId
+from pymongo import MongoClient  # type: ignore
+from pymongo.collection import Collection  # type: ignore
+from pymongo.database import Database  # type: ignore
+from bson import ObjectId  # type: ignore
 import json
 
 @dataclass
@@ -21,6 +21,14 @@ class CustomTask:
     updated_at: str
     tags: Optional[str] = None
     batch_mode: Optional[bool] = None
+
+@dataclass
+class APIKey:
+    id: Optional[str]
+    key: str
+    created_at: str
+    last_used_at: Optional[str] = None
+    revoked: bool = False
 
 class MongoDBManager:
     def __init__(self, connection_string: str = "mongodb://localhost:27017", database_name: str = "bert_studio"):
@@ -38,6 +46,7 @@ class MongoDBManager:
         self.db: Database = database
         
         self.tasks_collection: Collection = self.db.custom_tasks
+        self.api_keys_collection: Collection = self.db.api_keys
         
         # Create indexes for better performance
         self._create_indexes()
@@ -63,6 +72,7 @@ class MongoDBManager:
                 ("description", "text"),
                 ("tags", "text")
             ])
+            self.api_keys_collection.create_index("key", unique=True)
         except Exception as e:
             # Firestore doesn't support creating indexes through MongoDB API
             # Indexes need to be created through Google Cloud Console
@@ -249,6 +259,35 @@ class MongoDBManager:
             created_ids.append(task_id)
         
         return created_ids
+    
+    def create_api_key(self, key: str) -> str:
+        now = datetime.now().isoformat()
+        doc = {"key": key, "created_at": now, "revoked": False, "last_used_at": None}
+        result = self.api_keys_collection.insert_one(doc)
+        return str(result.inserted_id)
+
+    def list_api_keys(self) -> list:
+        keys = []
+        for doc in self.api_keys_collection.find():
+            doc['id'] = str(doc['_id'])
+            del doc['_id']
+            keys.append(doc)
+        return keys
+
+    def revoke_api_key(self, key_id: str) -> bool:
+        result = self.api_keys_collection.update_one({"_id": ObjectId(key_id)}, {"$set": {"revoked": True}})
+        return result.modified_count > 0
+
+    def delete_api_key(self, key_id: str) -> bool:
+        result = self.api_keys_collection.delete_one({"_id": ObjectId(key_id)})
+        return result.deleted_count > 0
+
+    def validate_api_key(self, key: str) -> bool:
+        doc = self.api_keys_collection.find_one({"key": key, "revoked": False})
+        if doc:
+            self.api_keys_collection.update_one({"_id": doc["_id"]}, {"$set": {"last_used_at": datetime.now().isoformat()}})
+            return True
+        return False
     
     def backup_database(self, backup_path: str):
         """Create a backup of the database."""

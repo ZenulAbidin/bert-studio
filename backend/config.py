@@ -42,6 +42,10 @@ class Config:
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW: int = 3600  # 1 hour
     
+    # Auth Configuration
+    AUTH_USERNAME: str = os.getenv("AUTH_USERNAME", "bert-developer")
+    AUTH_PASSWORD: str = os.getenv("AUTH_PASSWORD", "changeme")
+    
     @classmethod
     def get_mongodb_config(cls) -> dict:
         """Get MongoDB configuration as dictionary."""

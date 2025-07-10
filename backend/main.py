@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request, Path, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, RootModel
 from typing import List, Optional, Dict, Any
@@ -11,6 +11,60 @@ import os
 import numpy as np
 from mongodb_database import mongodb_manager, CustomTask
 from datetime import datetime
+import secrets
+
+# --- Session and Captcha Auth ---
+from fastapi import Response, status, Depends
+from fastapi.responses import StreamingResponse, JSONResponse
+from itsdangerous import URLSafeSerializer, BadSignature
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+import random, string
+from config import Config
+
+SESSION_SECRET = os.getenv("SESSION_SECRET", "supersecretkey")
+session_serializer = URLSafeSerializer(SESSION_SECRET, salt="session")
+
+# Helper: get session from cookie
+
+def get_session(request: Request):
+    cookie = request.cookies.get("session")
+    if not cookie:
+        return {}
+    try:
+        return session_serializer.loads(cookie)
+    except BadSignature:
+        return {}
+
+def set_session(response: Response, session: dict):
+    cookie_val = session_serializer.dumps(session)
+    response.set_cookie("session", cookie_val, httponly=True, samesite="lax")
+
+def clear_session(response: Response):
+    response.delete_cookie("session")
+
+# Captcha generation
+
+def generate_captcha_text(length=5):
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+def generate_captcha_image(text):
+    img = Image.new('RGB', (120, 40), color=(255, 255, 255))
+    d = ImageDraw.Draw(img)
+    # Use a truetype font if available, else default
+    try:
+        font = ImageFont.truetype("arial.ttf", 28)
+    except:
+        font = ImageFont.load_default()
+    d.text((10, 5), text, font=font, fill=(0, 0, 0))
+    # Add noise
+    for _ in range(30):
+        x1 = random.randint(0, 120)
+        y1 = random.randint(0, 40)
+        x2 = random.randint(0, 120)
+        y2 = random.randint(0, 40)
+        d.line(((x1, y1), (x2, y2)), fill=(0,0,0), width=1)
+    return img
 
 app = FastAPI(
     title="BERT Studio Embedding API",
@@ -307,6 +361,29 @@ class SettingsResponse(BaseModel):
     class Config:
         protected_namespaces = ()
 
+def login_required(request: Request):
+    session = get_session(request)
+    if not session.get('logged_in'):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return session
+
+def api_key_or_login_required(request: Request, authorization: str = Header(None)):
+    # 1. Check for API key in Authorization header
+    api_key = None
+    if authorization and authorization.lower().startswith('bearer '):
+        api_key = authorization[7:]
+    # 2. Or in query param
+    if not api_key:
+        api_key = request.query_params.get('api_key')
+    # 3. Validate API key
+    if api_key and mongodb_manager.validate_api_key(api_key):
+        return {"api_key": api_key}
+    # 4. Fallback to session
+    session = get_session(request)
+    if not session.get('logged_in'):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return session
+
 @app.get("/", response_model=HealthResponse)
 def read_root():
     """
@@ -318,7 +395,7 @@ def read_root():
     return {"message": "Backend is running!"}
 
 @app.post("/embed", response_model=EmbeddingResponse)
-def embed_texts(request: EmbeddingRequest):
+def embed_texts(request: EmbeddingRequest, session=Depends(api_key_or_login_required)):
     """
     Generate embeddings for a list of input texts using a loaded HuggingFace model.
     """
@@ -348,7 +425,7 @@ class BatchEmbeddingResponse(BaseModel):
     embeddings: List[List[float]]
 
 @app.post("/embed/batch", response_model=BatchEmbeddingResponse)
-def embed_texts_batch(request: BatchEmbeddingRequest):
+def embed_texts_batch(request: BatchEmbeddingRequest, session=Depends(api_key_or_login_required)):
     """
     Generate embeddings for a batch of input texts using a loaded HuggingFace model.
     """
@@ -582,7 +659,7 @@ class ClassificationResponse(BaseModel):
     results: List[Dict[str, Any]]
 
 @app.post("/classify", response_model=ClassificationResponse)
-def classify_texts(request: ClassificationRequest):
+def classify_texts(request: ClassificationRequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "distilbert-base-uncased-finetuned-sst-2-english"
     try:
         classifier = pipeline("sentiment-analysis", model=model_id)
@@ -779,7 +856,7 @@ def _execute_custom_task(tokenizer_code: str, model_code: str, function_code: st
         raise HTTPException(status_code=400, detail=f"Custom task execution failed: {str(e)}")
 
 @app.post("/custom-task", response_model=CustomTaskResponse)
-def execute_custom_task(request: CustomTaskRequest):
+def execute_custom_task(request: CustomTaskRequest, session=Depends(api_key_or_login_required)):
     """
     Execute custom tasks with security restrictions.
     """
@@ -796,7 +873,7 @@ def execute_custom_task(request: CustomTaskRequest):
         return {"result": None, "error": str(e)}
 
 @app.post("/custom-task/batch", response_model=BatchCustomTaskResponse)
-def execute_custom_task_batch(request: BatchCustomTaskRequest):
+def execute_custom_task_batch(request: BatchCustomTaskRequest, session=Depends(api_key_or_login_required)):
     """
     Execute a custom task for a batch of input texts with security restrictions, efficiently in one call.
     The provided function_code must define custom_function(input_texts: List[str]) -> List[Any].
@@ -950,7 +1027,7 @@ class ImportTasksRequest(BaseModel):
     tasks: List[Dict[str, Any]]
 
 @app.post("/custom-tasks", response_model=MessageResponse)
-def save_custom_task(request: SaveTaskRequest):
+def save_custom_task(request: SaveTaskRequest, session=Depends(api_key_or_login_required)):
     """
     Save a custom task to the database.
     """
@@ -974,7 +1051,7 @@ def save_custom_task(request: SaveTaskRequest):
         raise HTTPException(status_code=400, detail=f"Failed to save task: {str(e)}")
 
 @app.get("/custom-tasks", response_model=TasksResponse)
-def get_custom_tasks():
+def get_custom_tasks(session=Depends(api_key_or_login_required)):
     """
     Get all saved custom tasks.
     """
@@ -1001,7 +1078,7 @@ def get_custom_tasks():
         raise HTTPException(status_code=400, detail=f"Failed to get tasks: {str(e)}")
 
 @app.get("/custom-tasks/{task_id}", response_model=TaskInfo)
-def get_custom_task(task_id: str):
+def get_custom_task(task_id: str, session=Depends(api_key_or_login_required)):
     """
     Get a specific custom task by ID.
     """
@@ -1026,7 +1103,7 @@ def get_custom_task(task_id: str):
         raise HTTPException(status_code=400, detail=f"Failed to get task: {str(e)}")
 
 @app.put("/custom-tasks/{task_id}", response_model=MessageResponse)
-def update_custom_task(task_id: str, request: SaveTaskRequest):
+def update_custom_task(task_id: str, request: SaveTaskRequest, session=Depends(api_key_or_login_required)):
     """
     Update an existing custom task.
     """
@@ -1052,7 +1129,7 @@ def update_custom_task(task_id: str, request: SaveTaskRequest):
         raise HTTPException(status_code=400, detail=f"Failed to update task: {str(e)}")
 
 @app.delete("/custom-tasks/{task_id}", response_model=MessageResponse)
-def delete_custom_task(task_id: str):
+def delete_custom_task(task_id: str, session=Depends(api_key_or_login_required)):
     """
     Delete a custom task.
     """
@@ -1066,7 +1143,7 @@ def delete_custom_task(task_id: str):
         raise HTTPException(status_code=400, detail=f"Failed to delete task: {str(e)}")
 
 @app.get("/custom-tasks/search/{query}", response_model=TasksResponse)
-def search_custom_tasks(query: str):
+def search_custom_tasks(query: str, session=Depends(api_key_or_login_required)):
     """
     Search custom tasks by name, description, or tags.
     """
@@ -1093,7 +1170,7 @@ def search_custom_tasks(query: str):
         raise HTTPException(status_code=400, detail=f"Failed to search tasks: {str(e)}")
 
 @app.get("/custom-tasks/model/{model_id}", response_model=TasksResponse)
-def get_tasks_by_model(model_id: str):
+def get_tasks_by_model(model_id: str, session=Depends(api_key_or_login_required)):
     """
     Get all custom tasks for a specific model.
     """
@@ -1120,7 +1197,7 @@ def get_tasks_by_model(model_id: str):
         raise HTTPException(status_code=400, detail=f"Failed to get tasks for model: {str(e)}")
 
 @app.get("/custom-tasks/export", response_model=List[Dict[str, Any]])
-def export_custom_tasks():
+def export_custom_tasks(session=Depends(api_key_or_login_required)):
     """
     Export all custom tasks as JSON.
     """
@@ -1130,7 +1207,7 @@ def export_custom_tasks():
         raise HTTPException(status_code=400, detail=f"Failed to export tasks: {str(e)}")
 
 @app.post("/custom-tasks/import", response_model=MessageResponse)
-def import_custom_tasks(request: ImportTasksRequest):
+def import_custom_tasks(request: ImportTasksRequest, session=Depends(api_key_or_login_required)):
     """
     Import custom tasks from JSON.
     """
@@ -1141,7 +1218,7 @@ def import_custom_tasks(request: ImportTasksRequest):
         raise HTTPException(status_code=400, detail=f"Failed to import tasks: {str(e)}")
 
 @app.get("/custom-tasks/stats")
-def get_task_stats():
+def get_task_stats(session=Depends(api_key_or_login_required)):
     """
     Get statistics about custom tasks.
     """
@@ -1151,7 +1228,7 @@ def get_task_stats():
         raise HTTPException(status_code=400, detail=f"Failed to get task stats: {str(e)}")
 
 @app.get("/custom-tasks/tags/{tags}")
-def get_tasks_by_tags(tags: str):
+def get_tasks_by_tags(tags: str, session=Depends(api_key_or_login_required)):
     """
     Get tasks that have any of the specified tags.
     """
@@ -1190,7 +1267,7 @@ class QAResponse(BaseModel):
     end: int
 
 @app.post("/qa", response_model=QAResponse)
-def question_answering(request: QARequest):
+def question_answering(request: QARequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "bert-large-uncased-whole-word-masking-finetuned-squad"
     try:
         qa = pipeline("question-answering", model=model_id)
@@ -1212,7 +1289,7 @@ class NERResponse(BaseModel):
     entities: List[Dict[str, Any]]
 
 @app.post("/ner", response_model=NERResponse)
-def named_entity_recognition(request: NERRequest):
+def named_entity_recognition(request: NERRequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "dslim/bert-base-NER"
     try:
         ner = pipeline("ner", model=model_id, aggregation_strategy="simple")
@@ -1239,7 +1316,7 @@ class FillMaskResponse(BaseModel):
     results: List[Dict[str, Any]]
 
 @app.post("/fill-mask", response_model=FillMaskResponse)
-def fill_mask(request: FillMaskRequest):
+def fill_mask(request: FillMaskRequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "bert-base-uncased"
     try:
         fill_masker = pipeline("fill-mask", model=model_id)
@@ -1258,7 +1335,7 @@ class SummarizationResponse(BaseModel):
     summary: str
 
 @app.post("/summarize", response_model=SummarizationResponse)
-def summarize(request: SummarizationRequest):
+def summarize(request: SummarizationRequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "facebook/bart-large-cnn"
     try:
         summarizer = pipeline("summarization", model=model_id)
@@ -1281,7 +1358,7 @@ class FeatureExtractionResponse(BaseModel):
     features: List[List[float]]
 
 @app.post("/features", response_model=FeatureExtractionResponse)
-def feature_extraction(request: FeatureExtractionRequest):
+def feature_extraction(request: FeatureExtractionRequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "bert-base-uncased"
     try:
         extractor = pipeline("feature-extraction", model=model_id)
@@ -1289,3 +1366,70 @@ def feature_extraction(request: FeatureExtractionRequest):
         return {"features": features[0]}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Feature extraction not supported for this model: {str(e)}") 
+
+@app.get("/captcha")
+def get_captcha(request: Request):
+    text = generate_captcha_text()
+    img = generate_captcha_image(text)
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    # Set captcha answer in session
+    session = get_session(request)
+    session['captcha'] = text
+    response = StreamingResponse(buf, media_type="image/png")
+    set_session(response, session)
+    return response
+
+@app.post("/api/login")
+async def login(request: Request):
+    body = await request.json()
+    username = body.get('username')
+    password = body.get('password')
+    captcha = body.get('captcha')
+    session = get_session(request)
+    # Check captcha
+    if not captcha or captcha.upper() != session.get('captcha', '').upper():
+        return JSONResponse({"error": "Invalid captcha"}, status_code=400)
+    # Check username/password
+    if username != Config.AUTH_USERNAME or password != Config.AUTH_PASSWORD:
+        return JSONResponse({"error": "Invalid username or password"}, status_code=400)
+    # Success: set session
+    session['logged_in'] = True
+    session.pop('captcha', None)
+    response = JSONResponse({"success": True})
+    set_session(response, session)
+    return response
+
+@app.post("/logout")
+def logout(request: Request):
+    response = JSONResponse({"success": True})
+    clear_session(response)
+    return response 
+
+@app.post("/api-keys")
+def create_api_key(request: Request, session=Depends(login_required)):
+    login_required(request)
+    key = secrets.token_urlsafe(32)
+    key_id = mongodb_manager.create_api_key(key)
+    return {"id": key_id, "key": key}
+
+@app.get("/api-keys")
+def list_api_keys(request: Request, session=Depends(login_required)):
+    login_required(request)
+    keys = mongodb_manager.list_api_keys()
+    # Do not return the actual key string for security, only id and metadata
+    for k in keys:
+        k.pop('key', None)
+    return {"api_keys": keys}
+
+@app.delete("/api-keys/{key_id}")
+def delete_api_key(request: Request, key_id: str = Path(...), session=Depends(login_required)):
+    login_required(request)
+    ok = mongodb_manager.delete_api_key(key_id)
+    return {"success": ok} 
+
+@app.get("/auth/check")
+def auth_check(request: Request):
+    session = get_session(request)
+    return {"authenticated": bool(session.get('logged_in'))} 
