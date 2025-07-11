@@ -6,6 +6,7 @@ RUN npm install
 COPY ./src ./src
 COPY ./public ./public
 COPY vite.config.ts ./
+COPY index.html ./
 RUN npm run build
 
 # --- Stage 2: Backend and final image ---
