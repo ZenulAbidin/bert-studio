@@ -29,7 +29,6 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
-# Make sure you also set the Mongodb environment variables.
 
 
 # Start FastAPI with Uvicorn

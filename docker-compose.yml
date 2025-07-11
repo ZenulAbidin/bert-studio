@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  bert_studio:
+    build: .
+    container_name: bert-backend
+    env_file:
+      - ./backend/.env.local
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+    # Uncomment if you want to mount code for live reload in dev
+    # volumes:
+    #   - ./backend:/app/backend
+    #   - ./src:/app/src
+    #   - ./public:/app/public
+
+  mongo:
+    image: mongo:6
+    container_name: bert-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  nginx:
+    image: nginx:1.25
+    container_name: bert-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./backend/static:/app/frontend:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
