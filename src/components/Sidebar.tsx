@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -13,8 +13,10 @@ import {
   Edit,
   FileText,
   Sliders,
-  Code
+  Code,
+  LogOut
 } from 'lucide-react';
+import apiClient from '@/lib/api';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,6 +43,51 @@ const playgroundActivities = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
   const location = useLocation();
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    apiClient.get('/auth/check')
+      .then(res => setLoggedIn(res.data.authenticated))
+      .catch(() => setLoggedIn(false));
+  }, [location]);
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.post('/logout');
+      setLoggedIn(false);
+      window.location.href = '/login';
+    } catch {
+      setLoggedIn(false);
+      window.location.href = '/login';
+    }
+  };
+
+  if (!loggedIn) {
+    return (
+      <div className={`fixed left-0 top-0 h-full ${isOpen ? 'w-64' : 'w-16'} bg-gray-900 text-white flex flex-col z-40 transition-all duration-300`}>
+        <div className="p-4">
+          <div className="flex items-center space-x-3">
+            <Brain className="h-8 w-8 text-blue-400" />
+            {isOpen && (
+              <div>
+                <h2 className="text-lg font-semibold">BERT Studio</h2>
+                <p className="text-xs text-gray-400">Model Playground</p>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="px-2 pt-2">
+          <Link
+            to="/login"
+            className={`group flex items-center ${isOpen ? 'px-3' : 'justify-center'} py-2 text-sm font-medium rounded-md transition-colors text-gray-300 hover:bg-gray-700 hover:text-white w-full`}
+          >
+            <LogOut className={`${isOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0`} />
+            {isOpen && 'Login'}
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`fixed left-0 top-0 h-full ${isOpen ? 'w-64' : 'w-16'} bg-gray-900 text-white flex flex-col z-40 transition-all duration-300`}>
@@ -107,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
           </div>
         </div>
         {/* Settings button at the bottom of the sidebar content */}
-        <div className="px-2 mt-auto mb-4">
+        <div className="px-2 mt-auto">
           <Link
             to="/settings"
             className={`
@@ -121,6 +168,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
             <Settings className={`${isOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0`} />
             {isOpen && 'Settings'}
           </Link>
+          <button
+            onClick={handleLogout}
+            className={`group flex items-center ${isOpen ? 'px-3' : 'justify-center'} py-2 text-sm font-medium rounded-md transition-colors text-gray-300 hover:bg-gray-700 hover:text-white mb-4 w-full`}
+          >
+            <LogOut className={`${isOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0`} />
+            {isOpen && 'Logout'}
+          </button>
         </div>
       </nav>
     </div>

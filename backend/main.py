@@ -361,6 +361,19 @@ class SettingsResponse(BaseModel):
     class Config:
         protected_namespaces = ()
 
+class ApiKeyResponse(BaseModel):
+    id: str
+    key: str
+
+class ApiKeyInfo(BaseModel):
+    id: str
+    created_at: str
+    revoked: bool
+    last_used_at: Optional[str] = None
+
+class ApiKeysListResponse(BaseModel):
+    api_keys: List[ApiKeyInfo]
+
 def login_required(request: Request):
     session = get_session(request)
     if not session.get('logged_in'):
@@ -457,7 +470,7 @@ def get_stats():
 
 # --- Browse Models ---
 @app.get("/models/available", response_model=AvailableModelsResponse)
-def list_available_models(search: Optional[str] = None, tag: Optional[str] = None):
+def list_available_models(search: Optional[str] = None, tag: Optional[str] = None, session=Depends(api_key_or_login_required)):
     """
     List available BERT models from HuggingFace Hub.
     """
@@ -493,7 +506,7 @@ def list_available_models(search: Optional[str] = None, tag: Optional[str] = Non
     return AvailableModelsResponse(response_models)
 
 @app.post("/models/download", response_model=MessageResponse)
-def download_model(data: DownloadModelRequest, background_tasks: BackgroundTasks):
+def download_model(data: DownloadModelRequest, background_tasks: BackgroundTasks, session=Depends(api_key_or_login_required)):
     """
     Download a model from HuggingFace Hub in the background.
     """
@@ -507,7 +520,7 @@ def download_model(data: DownloadModelRequest, background_tasks: BackgroundTasks
 
 # --- Downloads ---
 @app.get("/models/downloaded", response_model=DownloadedModelsResponse)
-def list_downloaded_models():
+def list_downloaded_models(session=Depends(api_key_or_login_required)):
     """
     List all downloaded models (from memory and HuggingFace cache).
     """
@@ -539,7 +552,7 @@ def list_downloaded_models():
     return DownloadedModelsResponse(models_out)
 
 @app.delete("/models/downloaded", response_model=MessageResponse)
-def delete_downloaded_model(author: str = Query(...), model: str = Query(...)):
+def delete_downloaded_model(author: str = Query(...), model: str = Query(...), session=Depends(api_key_or_login_required)):
     """
     Delete a downloaded model from memory and HuggingFace cache.
     """
@@ -575,14 +588,14 @@ def delete_downloaded_model(author: str = Query(...), model: str = Query(...)):
 
 # --- Playground ---
 @app.get("/models/loaded", response_model=LoadedModelsResponse)
-def list_loaded_models():
+def list_loaded_models(session=Depends(api_key_or_login_required)):
     """
     List all currently loaded models in memory.
     """
     return LoadedModelsResponse([k for k, v in loaded_models.items() if v is not None])
 
 @app.get("/models/loading", response_model=LoadingModelsResponse)
-def list_loading_models():
+def list_loading_models(session=Depends(api_key_or_login_required)):
     """
     List all models currently being loaded.
     """
@@ -590,7 +603,7 @@ def list_loading_models():
 
 # --- Settings ---
 @app.get("/settings", response_model=SettingsResponse)
-def get_settings():
+def get_settings(session=Depends(api_key_or_login_required)):
     """
     Get backend settings.
     """
@@ -603,7 +616,7 @@ def get_settings():
     )
 
 @app.post("/settings", response_model=MessageResponse)
-def update_settings(data: SettingsUpdateRequest):
+def update_settings(data: SettingsUpdateRequest, session=Depends(api_key_or_login_required)):
     """
     Update backend settings.
     """
@@ -613,7 +626,7 @@ def update_settings(data: SettingsUpdateRequest):
     return {"message": "Settings updated"}
 
 @app.post("/models/load", response_model=MessageResponse)
-def load_model(data: LoadModelRequest, background_tasks: BackgroundTasks):
+def load_model(data: LoadModelRequest, background_tasks: BackgroundTasks, session=Depends(api_key_or_login_required)):
     """
     Load a model from local cache into memory in the background.
     """
@@ -1407,15 +1420,15 @@ def logout(request: Request):
     clear_session(response)
     return response 
 
-@app.post("/api-keys")
-def create_api_key(request: Request, session=Depends(login_required)):
+@app.post("/api-keys", response_model=ApiKeyResponse)
+def create_api_key(request: Request, session=Depends(api_key_or_login_required)):
     login_required(request)
     key = secrets.token_urlsafe(32)
     key_id = mongodb_manager.create_api_key(key)
     return {"id": key_id, "key": key}
 
-@app.get("/api-keys")
-def list_api_keys(request: Request, session=Depends(login_required)):
+@app.get("/api-keys", response_model=ApiKeysListResponse)
+def list_api_keys(request: Request, session=Depends(api_key_or_login_required)):
     login_required(request)
     keys = mongodb_manager.list_api_keys()
     # Do not return the actual key string for security, only id and metadata
@@ -1423,8 +1436,8 @@ def list_api_keys(request: Request, session=Depends(login_required)):
         k.pop('key', None)
     return {"api_keys": keys}
 
-@app.delete("/api-keys/{key_id}")
-def delete_api_key(request: Request, key_id: str = Path(...), session=Depends(login_required)):
+@app.delete("/api-keys/{key_id}", response_model=MessageResponse)
+def delete_api_key(request: Request, key_id: str = Path(...), session=Depends(api_key_or_login_required)):
     login_required(request)
     ok = mongodb_manager.delete_api_key(key_id)
     return {"success": ok} 
