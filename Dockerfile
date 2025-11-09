@@ -24,13 +24,11 @@ COPY backend ./backend
 COPY --from=frontend-build /app/dist ./backend/static
 
 # Expose port
-EXPOSE 8000
+EXPOSE 4794
 
 # Set environment variables (optional, can be overridden)
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
-
-
+ENV PORT=4794
 
 # Start FastAPI with Uvicorn
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "4794"] 
