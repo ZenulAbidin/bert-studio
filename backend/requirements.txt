@@ -9,3 +9,6 @@ python-dotenv
 accelerate
 Pillow
 itsdangerous
+datasets
+scikit-learn
+sentencepiece
