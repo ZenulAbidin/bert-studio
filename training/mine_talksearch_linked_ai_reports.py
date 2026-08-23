@@ -67,8 +67,10 @@ def evidence_windows(text):
     """Return (target id, localized evidence) pairs, de-duplicated per report."""
     windows = {}
     for match in LINK.finditer(text):
-        start = max(0, match.start() - 650)
-        end = min(len(text), match.end() + 650)
+        # Keep the claim close to the URL.  Forum quotes routinely contain old
+        # links followed much later by an allegation about somebody else.
+        start = max(0, match.start() - 400)
+        end = min(len(text), match.end() + 400)
         window = text[start:end]
         target = int(match.group(1))
         # A link alone is not a label.  The reporter must mention AI and an
