@@ -1,4 +1,4 @@
-:4793 {
+http://:4793 {
     handle_path /api/* {
         reverse_proxy backend:4794
     }
@@ -6,6 +6,4 @@
     handle {
         reverse_proxy backend:4794
     }
-
-    tls internal
 }

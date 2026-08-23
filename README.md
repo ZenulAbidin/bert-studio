@@ -115,6 +115,10 @@ review queues. It is intentionally review-only and records the model identity
 with every score. See [TalkSearch AI review workflow](docs/talksearch-ai-review.md)
 for the request contract, calibration gate, and deployment configuration.
 
+The bundled Caddy listener is deliberately loopback-only in production. Reach
+it via an authenticated SSH tunnel or place it behind the host's existing TLS
+terminator; it does not expose an unauthenticated public port.
+
 ### Custom Tasks
 Create custom PyTorch code with these security features:
 - Only `transformers` and `torch` imports allowed
