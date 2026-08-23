@@ -37,10 +37,11 @@ def main():
         for target in re.findall(r"(?:msg|#msg)(\d{6,})", text, re.I):
             if str(post.get("post_id")) != target:
                 evidence.setdefault(int(target), set()).add(int(post["post_id"]))
-    positives = request(env, f"/{index}/_mget", {"ids": [str(post_id) for post_id in evidence], "_source": ["post_id", "content", "lang"]})["docs"]
+    positives = request(env, f"/{index}/_search", {"size": len(evidence), "_source": ["post_id", "content", "lang"],
+        "query": {"terms": {"post_id": sorted(evidence)}}})["hits"]["hits"]
     rows = [{"post_id": doc["_source"]["post_id"], "text": doc["_source"].get("content", ""), "label": 1,
              "evidence_post_ids": sorted(evidence[doc["_source"]["post_id"]]), "label_source": "explicit_multi_detector_report"}
-            for doc in positives if doc.get("found") and len(doc.get("_source", {}).get("content", "").split()) >= 40]
+            for doc in positives if len(doc.get("_source", {}).get("content", "").split()) >= 40]
     negatives = request(env, f"/{index}/_search", {"size": len(rows) * args.negatives_per_positive, "_source": ["post_id", "content"], "query": {"function_score": {"query": {"bool": {"must_not": [{"simple_query_string": {"query": "chatgpt | ai generated | gptzero | zerogpt", "fields": ["content"]}}]}}, "random_score": {"seed": 20260823}}}})["hits"]["hits"]
     for hit in negatives:
         source = hit.get("_source", {})
