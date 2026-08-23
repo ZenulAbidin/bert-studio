@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fine-tune an English reported-AI-content classifier on audited JSONL data."""
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -27,10 +28,15 @@ def main():
     parser.add_argument("--epochs", type=float, default=3)
     parser.add_argument("--max-length", type=int, default=256)
     args = parser.parse_args()
-    dataset = Dataset.from_json(args.data).remove_columns([name for name in Dataset.from_json(args.data).column_names if name not in {"text", "label"}])
+    rows = [json.loads(line) for line in Path(args.data).read_text().splitlines() if line.strip()]
+    dataset = Dataset.from_list([{key: row[key] for key in ("text", "label")} for row in rows])
     if len(set(dataset["label"])) != 2 or sum(dataset["label"]) < 30:
         raise SystemExit("Need at least 30 evidence-backed positives and both classes before training")
-    split = dataset.train_test_split(test_size=0.2, stratify_by_column="label", seed=20260823)
+    indices = list(range(len(dataset)))
+    train_indices, test_indices = train_test_split(
+        indices, test_size=0.2, stratify=dataset["label"], random_state=20260823
+    )
+    split = {"train": dataset.select(train_indices), "test": dataset.select(test_indices)}
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     def tokenize(batch): return tokenizer(batch["text"], truncation=True, max_length=args.max_length)
     tokenized = split.map(tokenize, batched=True)
