@@ -108,6 +108,13 @@ BERT Studio follows a modern full-stack architecture:
 4. Choose or download a model
 5. Input your text and run inference
 
+### TalkSearch review scoring
+
+The production API includes a batch endpoint for model-assisted TalkSearch
+review queues. It is intentionally review-only and records the model identity
+with every score. See [TalkSearch AI review workflow](docs/talksearch-ai-review.md)
+for the request contract, calibration gate, and deployment configuration.
+
 ### Custom Tasks
 Create custom PyTorch code with these security features:
 - Only `transformers` and `torch` imports allowed

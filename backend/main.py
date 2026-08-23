@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request, Path, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel, RootModel, Field
 from typing import List, Optional, Dict, Any
 import torch
 import transformers
@@ -22,7 +22,9 @@ from PIL import Image, ImageDraw, ImageFont
 import random, string
 from config import Config
 
-SESSION_SECRET = os.getenv("SESSION_SECRET", "supersecretkey")
+SESSION_SECRET = os.getenv("SESSION_SECRET")
+if not SESSION_SECRET:
+    raise RuntimeError("SESSION_SECRET must be set")
 session_serializer = URLSafeSerializer(SESSION_SECRET, salt="session")
 
 # Helper: get session from cookie
@@ -73,10 +75,7 @@ app = FastAPI(
     )
 
 # CORS Middleware
-origins = [
-    "http://localhost:8000", # Vite default port
-    "http://localhost:8080", # Another common dev port
-]
+origins = [item.strip() for item in os.getenv("CORS_ORIGINS", "").split(",") if item.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,7 +89,7 @@ app.add_middleware(
 settings_store = {
     "hf_token": None,
     "server_url": "http://localhost:8000",
-    "model_cache_dir": "./models",
+    "model_cache_dir": Config.DEFAULT_MODEL_CACHE_DIR,
     "notifications": {
         "download_complete": True,
         "on_error": True
@@ -110,6 +109,26 @@ downloaded_models: Dict[str, Dict[str, Any]] = {}
 loaded_models: Dict[str, Any] = {}  # Only stores models now
 loaded_tokenizers: Dict[str, Any] = {}  # New: stores tokenizers
 loading_models: Dict[str, Dict[str, Any]] = {}  # Track loading status
+classification_pipelines: Dict[str, Pipeline] = {}
+
+
+def inference_device() -> int:
+    """Return the transformers pipeline device; CPU is always a safe fallback."""
+    requested = Config.INFERENCE_DEVICE.lower()
+    if requested == "cpu":
+        return -1
+    if requested in {"auto", "cuda"} and torch.cuda.is_available():
+        return 0
+    return -1
+
+
+def classifier_for(model_id: str) -> Pipeline:
+    """Cache a sequence-classification pipeline instead of rebuilding per request."""
+    if model_id not in classification_pipelines:
+        classification_pipelines[model_id] = pipeline(
+            "text-classification", model=model_id, tokenizer=model_id, device=inference_device()
+        )
+    return classification_pipelines[model_id]
 
 # --- Helper Functions ---
 def _get_model_size(model_id: str) -> int:
@@ -407,6 +426,17 @@ def read_root():
     _cleanup_loading_status()
     return {"message": "Backend is running!"}
 
+
+@app.get("/healthz")
+def healthz():
+    """Unauthenticated liveness check suitable for a local reverse proxy."""
+    return {
+        "status": "ok",
+        "cuda_available": torch.cuda.is_available(),
+        "inference_device": "cuda" if inference_device() >= 0 else "cpu",
+        "loaded_classifiers": sorted(classification_pipelines),
+    }
+
 @app.post("/embed", response_model=EmbeddingResponse)
 def embed_texts(request: EmbeddingRequest, session=Depends(api_key_or_login_required)):
     """
@@ -665,7 +695,7 @@ def load_model(data: LoadModelRequest, background_tasks: BackgroundTasks, sessio
 
 # --- ML Activity Endpoints ---
 class ClassificationRequest(BaseModel):
-    texts: List[str]
+    texts: List[str] = Field(min_length=1, max_length=128)
     model: Optional[str] = "distilbert-base-uncased-finetuned-sst-2-english"
 
 class ClassificationResponse(BaseModel):
@@ -675,11 +705,49 @@ class ClassificationResponse(BaseModel):
 def classify_texts(request: ClassificationRequest, session=Depends(api_key_or_login_required)):
     model_id = request.model or "distilbert-base-uncased-finetuned-sst-2-english"
     try:
-        classifier = pipeline("sentiment-analysis", model=model_id)
-        results = classifier(request.texts)
+        if any(not text.strip() or len(text) > 12000 for text in request.texts):
+            raise HTTPException(status_code=422, detail="Each text must contain 1–12,000 characters")
+        results = classifier_for(model_id)(request.texts, truncation=True)
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Classification not supported for this model: {str(e)}")
+
+
+class TalkSearchPost(BaseModel):
+    post_id: Optional[int] = None
+    content: str = Field(min_length=1, max_length=12000)
+
+
+class TalkSearchScoreRequest(BaseModel):
+    posts: List[TalkSearchPost] = Field(min_length=1, max_length=128)
+    model: Optional[str] = None
+
+
+@app.post("/talksearch/score")
+def score_talksearch_posts(request: TalkSearchScoreRequest, session=Depends(api_key_or_login_required)):
+    """Score posts for a review queue using the configured sequence classifier.
+
+    ``machine_score`` is a model probability, not a declaration of authorship.
+    The positive label is explicit because label ordering differs between models.
+    """
+    model_id = request.model or Config.AI_DETECTOR_MODEL
+    try:
+        results = classifier_for(model_id)([post.content for post in request.posts], truncation=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to run {model_id}: {exc}")
+    positive = Config.AI_DETECTOR_POSITIVE_LABEL.casefold()
+    scored = []
+    for post, result in zip(request.posts, results):
+        is_positive = str(result["label"]).casefold() == positive
+        confidence = float(result["score"])
+        scored.append({
+            **({"post_id": post.post_id} if post.post_id is not None else {}),
+            "machine_score": round(confidence if is_positive else 1 - confidence, 6),
+            "label": result["label"],
+            "model": model_id,
+            "review_only": True,
+        })
+    return {"results": scored}
 
 # --- Custom Tasks Endpoint ---
 class CustomTaskRequest(BaseModel):
@@ -1445,4 +1513,4 @@ def delete_api_key(request: Request, key_id: str = Path(...), session=Depends(ap
 @app.get("/auth/check")
 def auth_check(request: Request):
     session = get_session(request)
-    return {"authenticated": bool(session.get('logged_in'))} 
+    return {"authenticated": bool(session.get('logged_in'))}

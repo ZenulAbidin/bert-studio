@@ -30,7 +30,12 @@ class Config:
     ]
     
     # Model Configuration
-    DEFAULT_MODEL_CACHE_DIR: str = "./models"
+    DEFAULT_MODEL_CACHE_DIR: str = os.getenv("MODEL_CACHE_DIR", "./models")
+    INFERENCE_DEVICE: str = os.getenv("INFERENCE_DEVICE", "auto")
+    AI_DETECTOR_MODEL: str = os.getenv(
+        "AI_DETECTOR_MODEL", "openai-community/roberta-base-openai-detector"
+    )
+    AI_DETECTOR_POSITIVE_LABEL: str = os.getenv("AI_DETECTOR_POSITIVE_LABEL", "Fake")
     MAX_MODEL_SIZE_MB: int = 5000  # 5GB limit
     
     # Task Configuration
@@ -102,4 +107,4 @@ def get_config(environment: str = "development") -> Config:
     return config_class()
 
 # Default configuration
-config = get_config() 
+config = get_config()

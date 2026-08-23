@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const apiClient = axios.create({
-  baseURL: "",
+  baseURL: "/api",
   withCredentials: true,
 });
 
@@ -18,4 +18,4 @@ export async function isAuthenticated(): Promise<boolean> {
   } catch {
     return false;
   }
-} 
+}

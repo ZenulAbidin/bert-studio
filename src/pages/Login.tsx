@@ -7,13 +7,13 @@ export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [captcha, setCaptcha] = useState('');
-  const [captchaUrl, setCaptchaUrl] = useState('/captcha?' + Date.now());
+  const [captchaUrl, setCaptchaUrl] = useState('/api/captcha?' + Date.now());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const captchaImgRef = useRef<HTMLImageElement>(null);
 
   const refreshCaptcha = () => {
-    setCaptchaUrl('/captcha?' + Date.now());
+    setCaptchaUrl('/api/captcha?' + Date.now());
     setCaptcha('');
   };
 
@@ -22,7 +22,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.post('/api/login', {
+      const res = await apiClient.post('/login', {
         username,
         password,
         captcha,
@@ -98,4 +98,4 @@ export const LoginPage: React.FC = () => {
   );
 };
 
-export default LoginPage; 
+export default LoginPage;

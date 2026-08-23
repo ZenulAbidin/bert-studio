@@ -2,10 +2,11 @@
     root * /srv
     file_server
 
-    reverse_proxy /api/* backend:4794
-    reverse_proxy /models/* backend:4794
+    handle_path /api/* {
+        reverse_proxy backend:4794
+    }
 
     try_files {path} /index.html
 
     tls internal
-} 
+}
