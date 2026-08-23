@@ -37,16 +37,31 @@ def main():
         for target in re.findall(r"(?:msg|#msg)(\d{6,})", text, re.I):
             if str(post.get("post_id")) != target:
                 evidence.setdefault(int(target), set()).add(int(post["post_id"]))
-    positives = request(env, f"/{index}/_search", {"size": len(evidence), "_source": ["post_id", "content", "lang"],
-        "query": {"terms": {"post_id": sorted(evidence)}}})["hits"]["hits"]
-    rows = [{"post_id": doc["_source"]["post_id"], "text": doc["_source"].get("content", ""), "label": 1,
-             "evidence_post_ids": sorted(evidence[doc["_source"]["post_id"]]), "label_source": "explicit_multi_detector_report"}
-            for doc in positives if len(doc.get("_source", {}).get("content", "").split()) >= 40]
-    negatives = request(env, f"/{index}/_search", {"size": len(rows) * args.negatives_per_positive, "_source": ["post_id", "content"], "query": {"function_score": {"query": {"bool": {"must_not": [{"simple_query_string": {"query": "chatgpt | ai generated | gptzero | zerogpt", "fields": ["content"]}}]}}, "random_score": {"seed": 20260823}}}})["hits"]["hits"]
+    positives = request(env, f"/{index}/_search", {"size": len(evidence) * 2, "_source": ["post_id", "content", "lang"],
+        "query": {"bool": {"filter": [{"terms": {"post_id": sorted(evidence)}}, {"term": {"lang": "en"}}]}}})["hits"]["hits"]
+    positive_by_id = {}
+    for doc in positives:
+        source = doc.get("_source", {})
+        post_id = source.get("post_id")
+        text = source.get("content", "")
+        if post_id in evidence and len(text.split()) >= 40:
+            positive_by_id.setdefault(post_id, {"post_id": post_id, "text": text, "label": 1,
+                                                "evidence_post_ids": sorted(evidence[post_id]),
+                                                "label_source": "explicit_multi_detector_report"})
+    rows = list(positive_by_id.values())
+    wanted_negatives = len(rows) * args.negatives_per_positive
+    negatives = request(env, f"/{index}/_search", {"size": min(10000, max(wanted_negatives * 5, 1000)), "_source": ["post_id", "content"], "query": {"function_score": {"query": {"bool": {"filter": [{"term": {"lang": "en"}}], "must_not": [{"terms": {"post_id": sorted(positive_by_id)}}, {"simple_query_string": {"query": "chatgpt | ai generated | gptzero | zerogpt", "fields": ["content"]}}]}}, "random_score": {"seed": 20260823}}}})["hits"]["hits"]
+    negative_ids = set()
     for hit in negatives:
         source = hit.get("_source", {})
-        if len(source.get("content", "").split()) >= 40:
+        post_id = source.get("post_id")
+        if post_id not in negative_ids and len(source.get("content", "").split()) >= 40:
             rows.append({"post_id": source["post_id"], "text": source["content"], "label": 0, "evidence_post_ids": [], "label_source": "random_non_ai_mention"})
+            negative_ids.add(post_id)
+        if len(negative_ids) >= wanted_negatives:
+            break
+    if len(negative_ids) < wanted_negatives:
+        raise RuntimeError(f"Only found {len(negative_ids)} eligible negatives; need {wanted_negatives}")
     random.Random(20260823).shuffle(rows)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows))
