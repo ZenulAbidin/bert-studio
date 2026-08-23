@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from datasets import Dataset
+from datasets import Dataset, DatasetDict
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
 from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
@@ -36,7 +36,7 @@ def main():
     train_indices, test_indices = train_test_split(
         indices, test_size=0.2, stratify=dataset["label"], random_state=20260823
     )
-    split = {"train": dataset.select(train_indices), "test": dataset.select(test_indices)}
+    split = DatasetDict({"train": dataset.select(train_indices), "test": dataset.select(test_indices)})
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     def tokenize(batch): return tokenizer(batch["text"], truncation=True, max_length=args.max_length)
     tokenized = split.map(tokenize, batched=True)
