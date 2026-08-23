@@ -15,7 +15,8 @@ import secrets
 
 # --- Session and Captcha Auth ---
 from fastapi import Response, status, Depends
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from pathlib import Path as FilePath
 from itsdangerous import URLSafeSerializer, BadSignature
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
@@ -426,8 +427,8 @@ def talksearch_worker_or_login_required(
         return {"internal_worker": True}
     return api_key_or_login_required(request)
 
-@app.get("/", response_model=HealthResponse)
-def read_root():
+@app.get("/status", response_model=HealthResponse)
+def read_status():
     """
     Health check endpoint.
     Returns a simple message to confirm the backend is running.
@@ -1526,3 +1527,19 @@ def delete_api_key(request: Request, key_id: str = Path(...), session=Depends(ap
 def auth_check(request: Request):
     session = get_session(request)
     return {"authenticated": bool(session.get('logged_in'))}
+
+
+# The compiled React app is copied into this directory by the production image.
+# Register this fallback last so API routes above continue to win.
+STATIC_DIR = FilePath(__file__).parent / "static"
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def frontend(full_path: str):
+    candidate = STATIC_DIR / full_path
+    if full_path and candidate.is_file():
+        return FileResponse(candidate)
+    index = STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    raise HTTPException(status_code=404, detail="Frontend assets are not installed")

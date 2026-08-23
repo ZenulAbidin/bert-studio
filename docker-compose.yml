@@ -33,7 +33,6 @@ services:
     ports:
       - "127.0.0.1:4793:4793"
     volumes:
-      - ./backend/static:/srv:ro
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config

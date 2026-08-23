@@ -1,12 +1,11 @@
 :4793 {
-    root * /srv
-    file_server
-
     handle_path /api/* {
         reverse_proxy backend:4794
     }
 
-    try_files {path} /index.html
+    handle {
+        reverse_proxy backend:4794
+    }
 
     tls internal
 }
