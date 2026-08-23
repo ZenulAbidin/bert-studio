@@ -31,4 +31,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=4794
 
 # Start FastAPI with Uvicorn
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "4794"] 
+CMD ["python", "-m", "uvicorn", "main:app", "--app-dir", "/app/backend", "--host", "0.0.0.0", "--port", "4794"]
