@@ -45,7 +45,11 @@ def main():
     training = TrainingArguments(output_dir=args.output, learning_rate=2e-5, num_train_epochs=args.epochs,
         per_device_train_batch_size=4, per_device_eval_batch_size=8, gradient_accumulation_steps=2,
         eval_strategy="epoch", save_strategy="epoch", load_best_model_at_end=True, metric_for_best_model="f1",
-        greater_is_better=True, fp16=torch.cuda.is_available(), report_to="none", seed=20260823)
+        greater_is_better=True,
+        # Transformers 5 + torch 2.13 mis-handle GradScaler with FP16 on CUDA.
+        # Ampere-and-newer GPUs use BF16; other devices remain in full precision.
+        fp16=False, bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        report_to="none", seed=20260823)
     trainer = Trainer(model=model, args=training, train_dataset=tokenized["train"], eval_dataset=tokenized["test"],
         processing_class=tokenizer, data_collator=DataCollatorWithPadding(tokenizer), compute_metrics=metrics)
     trainer.train()
