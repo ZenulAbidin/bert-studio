@@ -416,6 +416,16 @@ def api_key_or_login_required(request: Request, authorization: str = Header(None
         raise HTTPException(status_code=401, detail="Not authenticated")
     return session
 
+
+def talksearch_worker_or_login_required(
+    request: Request, x_internal_scorer_token: Optional[str] = Header(None)
+):
+    """Permit only the configured local batch worker to bypass interactive login."""
+    expected = os.getenv("INTERNAL_SCORER_TOKEN")
+    if expected and x_internal_scorer_token and secrets.compare_digest(expected, x_internal_scorer_token):
+        return {"internal_worker": True}
+    return api_key_or_login_required(request)
+
 @app.get("/", response_model=HealthResponse)
 def read_root():
     """
@@ -724,7 +734,9 @@ class TalkSearchScoreRequest(BaseModel):
 
 
 @app.post("/talksearch/score")
-def score_talksearch_posts(request: TalkSearchScoreRequest, session=Depends(api_key_or_login_required)):
+def score_talksearch_posts(
+    request: TalkSearchScoreRequest, session=Depends(talksearch_worker_or_login_required)
+):
     """Score posts for a review queue using the configured sequence classifier.
 
     ``machine_score`` is a model probability, not a declaration of authorship.

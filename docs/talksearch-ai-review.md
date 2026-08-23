@@ -35,6 +35,10 @@ Each result contains `machine_score` from 0 to 1, the model label, the exact
 model id, and `review_only: true`. Persist the model id and score with the
 review record so a later model change does not overwrite historical evidence.
 
+The batch worker supplies `X-Internal-Scorer-Token`; set the same random value
+as `INTERNAL_SCORER_TOKEN` in the BERT Studio host configuration. This token is
+only for loopback worker-to-service requests and must never be sent to browsers.
+
 ## Calibration gate
 
 Before scoring the corpus, sample and manually label at least 500 posts across
