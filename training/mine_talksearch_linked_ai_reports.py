@@ -147,21 +147,26 @@ def main():
 
     accepted = []
     for row in candidates:
+        specific = "the linked post's author is being accused of using AI to write it"
+        generic = "this only discusses AI-generated posts generally, not the linked post"
         result = classifier(
             row["evidence_text"],
-            candidate_labels=["the linked post's author is being accused of using AI to write it"],
+            candidate_labels=[specific, generic],
             hypothesis_template="This report says that {}.",
             multi_label=True,
             truncation=True,
         )
-        score = float(result["scores"][0])
+        scores = dict(zip(result["labels"], result["scores"]))
+        score = float(scores[specific])
+        generic_score = float(scores[generic])
         row.update(
-            label="user_reported_ai_link" if score >= args.threshold else "rejected_or_ambiguous",
+            label="user_reported_ai_link" if score >= args.threshold and generic_score < 0.50 else "rejected_or_ambiguous",
             nli_entailment_score=round(score, 6),
+            nli_generic_discussion_score=round(generic_score, 6),
             nli_model=args.model,
-            nli_hypothesis="the linked post's author is being accused of using AI to write it",
+            nli_hypothesis=specific,
         )
-        if score >= args.threshold:
+        if score >= args.threshold and generic_score < 0.50:
             accepted.append(row)
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
