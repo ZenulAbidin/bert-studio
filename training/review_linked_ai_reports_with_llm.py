@@ -62,23 +62,28 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--audit-out", help="optional manifest containing accepted and rejected reviews")
     parser.add_argument("--llm-env", required=True)
     parser.add_argument("--url", default="http://local-llm:5030/v1/chat/completions")
     parser.add_argument("--threshold", type=float, default=0.85)
     args = parser.parse_args()
     key = env_file(args.llm_env)["LOCAL_LLM_API_KEY"]
     rows = [json.loads(line) for line in Path(args.input).read_text().splitlines() if line.strip()]
-    accepted, rejected = [], 0
+    accepted, audited, rejected = [], [], 0
     for row in rows:
         decision, confidence, reason = review(args.url, key, row)
         row.update(llm_review_model="Qwen2.5-3B-Instruct-Q4_K_M", llm_review_decision=decision,
                    llm_review_confidence=round(confidence, 4), llm_review_reason=reason)
+        audited.append(row)
         if decision == "accept" and confidence >= args.threshold:
             accepted.append(row)
         else:
             rejected += 1
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in accepted))
+    if args.audit_out:
+        Path(args.audit_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.audit_out).write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in audited))
     print(json.dumps({"input": len(rows), "accepted": len(accepted), "rejected_or_unclear": rejected, "output": args.out}))
 
 
