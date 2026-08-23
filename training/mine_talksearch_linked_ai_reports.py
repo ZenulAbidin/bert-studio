@@ -25,6 +25,14 @@ ALLEGATION = re.compile(
     r"\b(?:using|used|use|written|write|generated|generate|made|create[ds]?|produced|copy(?:ing|ied)?|plagiar(?:ized|ism)|bot)\b",
     re.I,
 )
+# The report must be about authorship of forum text, not AI images, team bios,
+# project branding, or an unrelated website linked in the same report.
+POST_AUTHORSHIP = re.compile(
+    r"(?:\b(?:post|message|comment|reply|text|content)s?\b.{0,90}\b(?:ai|chatgpt|gpt|llm)\b|"
+    r"\b(?:ai|chatgpt|gpt|llm)\b.{0,90}\b(?:post|message|comment|reply|text|content)s?\b|"
+    r"\b(?:author|account|user|member|poster|you)\b.{0,80}\b(?:use|used|using|writ(?:e|es|ten|ing))\b.{0,80}\b(?:ai|chatgpt|gpt|llm)\b)",
+    re.I,
+)
 
 
 def load_env(path):
@@ -65,7 +73,7 @@ def evidence_windows(text):
         target = int(match.group(1))
         # A link alone is not a label.  The reporter must mention AI and an
         # accusation/action close enough for a human reviewer to understand it.
-        if AI_WORDS.search(window) and ALLEGATION.search(window):
+        if AI_WORDS.search(window) and ALLEGATION.search(window) and POST_AUTHORSHIP.search(window):
             windows.setdefault(target, window)
     return windows.items()
 
