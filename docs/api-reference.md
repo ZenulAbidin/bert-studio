@@ -1,257 +1,222 @@
-# API Reference
+# API reference
 
-## Overview
-
-BERT Studio provides a RESTful API built with FastAPI for all backend operations. The API handles model management, task execution, custom code processing, and MongoDB operations.
+The backend is a FastAPI application. A running backend also serves this
+information, generated from the code, at `/docs` (Swagger UI) and
+`/openapi.json`.
 
 ## Base URL
 
-- Development: `http://localhost:8000`
-- Production: `https://your-domain.com/api`
+| Route | Base URL | Notes |
+|---|---|---|
+| Directly to the backend | `http://127.0.0.1:4794` | Use this from scripts on the same host or network |
+| Through Caddy | `http://127.0.0.1:4793/api` | What the web interface uses; Caddy strips the `/api` prefix |
+
+The paths below are relative to either base URL.
 
 ## Authentication
 
-Most endpoints require API key authentication via session management.
+Every endpoint except `GET /healthz`, `GET /status`, `GET /stats`,
+`GET /captcha`, `GET /auth/check` and the login itself needs one of:
 
-### Login
-```http
-POST /auth/login
-Content-Type: application/json
+- an **API key** in the header: `Authorization: Bearer <key>`. The
+  `?api_key=<key>` query parameter also works, but avoid it: URLs are
+  written to access logs;
+- a **browser session**: the signed `session` cookie set by a successful
+  login.
 
-{
-  "api_key": "your-api-key"
-}
+A missing or wrong key returns `401 {"detail": "Not authenticated"}`.
+
+### Creating an API key
+
+From the shell on the server (no browser needed):
+
+```bash
+docker compose exec -T backend python backend/create_api_key.py
 ```
 
-### Logout
-```http
-POST /auth/logout
-```
+Or log in to the web interface and use the API Keys page. The key is shown
+once. Keys are stored in MongoDB.
 
-## Model Management
+| Method and path | Body | Response |
+|---|---|---|
+| `POST /api-keys` | none | `{"id": "...", "key": "..."}` |
+| `GET /api-keys` | none | `{"api_keys": [{"id", "created_at", "revoked", "last_used_at"}]}` |
+| `DELETE /api-keys/{id}` | none | `{"success": true}` |
 
-### List Available Models
-```http
-GET /models
-```
+These three need a logged-in browser session; an API key alone cannot create
+or list keys.
 
-### Download Model
-```http
-POST /models/download
-Content-Type: application/json
+### Web login
 
-{
-  "model_name": "distilbert-base-uncased",
-  "task_type": "classification"
-}
-```
+| Method and path | Body | Response |
+|---|---|---|
+| `GET /captcha` | none | PNG image; sets the session cookie |
+| `POST /api/login` | `{"username", "password", "captcha"}` | `{"success": true}` and a logged-in session cookie |
+| `POST /logout` | none | `{"success": true}` |
+| `GET /auth/check` | none | `{"authenticated": true}` or `false` |
 
-### Get Model Info
-```http
-GET /models/{model_name}/info
-```
+## Health
 
-## Task Execution
+### `GET /healthz`
 
-### Text Classification
-```http
-POST /tasks/classification
-Content-Type: application/json
-
-{
-  "text": "This is a great product!",
-  "model_name": "distilbert-base-uncased"
-}
-```
-
-### Question Answering
-```http
-POST /tasks/qa
-Content-Type: application/json
-
-{
-  "question": "What is BERT?",
-  "context": "BERT is a transformer model...",
-  "model_name": "bert-large-uncased-whole-word-masking-finetuned-squad"
-}
-```
-
-### Named Entity Recognition
-```http
-POST /tasks/ner
-Content-Type: application/json
-
-{
-  "text": "John works at Google in California",
-  "model_name": "dbmdz/bert-large-cased-finetuned-conll03-english"
-}
-```
-
-### Text Summarization
-```http
-POST /tasks/summarization
-Content-Type: application/json
-
-{
-  "text": "Long text to summarize...",
-  "model_name": "facebook/bart-large-cnn",
-  "max_length": 150,
-  "min_length": 50
-}
-```
-
-### Generate Embeddings
-```http
-POST /tasks/embeddings
-Content-Type: application/json
-
-{
-  "text": "Text to embed",
-  "model_name": "sentence-transformers/all-MiniLM-L6-v2"
-}
-```
-
-## Custom Tasks
-
-### Execute Custom Code
-```http
-POST /tasks/custom
-Content-Type: application/json
-
-{
-  "tokenizer_code": "tokenizer = AutoTokenizer.from_pretrained('model-name')",
-  "model_code": "model = AutoModel.from_pretrained('model-name')",
-  "function_code": "def custom_function(text): return {'result': 'processed'}",
-  "input_text": "Input text here"
-}
-```
-
-### Save Custom Task
-```http
-POST /custom-tasks
-Content-Type: application/json
-
-{
-  "name": "My Custom Task",
-  "description": "Description of the task",
-  "tags": ["nlp", "classification"],
-  "tokenizer_code": "...",
-  "model_code": "...",
-  "function_code": "...",
-  "model_name": "distilbert-base-uncased"
-}
-```
-
-### List Custom Tasks
-```http
-GET /custom-tasks?search=query&tags=nlp,classification&model=distilbert-base-uncased
-```
-
-### Get Custom Task
-```http
-GET /custom-tasks/{task_id}
-```
-
-### Update Custom Task
-```http
-PUT /custom-tasks/{task_id}
-Content-Type: application/json
-
-{
-  "name": "Updated Task Name",
-  "description": "Updated description",
-  "tags": ["updated", "tags"]
-}
-```
-
-### Delete Custom Task
-```http
-DELETE /custom-tasks/{task_id}
-```
-
-## Task Management
-
-### Export Tasks
-```http
-POST /custom-tasks/export
-Content-Type: application/json
-
-{
-  "task_ids": ["task1_id", "task2_id"]
-}
-```
-
-### Import Tasks
-```http
-POST /custom-tasks/import
-Content-Type: multipart/form-data
-
-file: tasks.json
-```
-
-### Get Statistics
-```http
-GET /custom-tasks/stats
-```
-
-## Health Check
-
-### API Health
-```http
-GET /health
-```
-
-### Database Health
-```http
-GET /health/db
-```
-
-## Error Responses
-
-All error responses follow this format:
+No authentication. Suitable for container health checks.
 
 ```json
 {
-  "error": "Error message",
-  "detail": "Detailed error information",
-  "status_code": 400
+  "status": "ok",
+  "cuda_available": true,
+  "inference_device": "cuda",
+  "loaded_classifiers": ["distilbert-base-uncased-finetuned-sst-2-english"]
 }
 ```
 
-## Rate Limiting
+`loaded_classifiers` lists the models that `/classify` has in memory.
 
-- 100 requests per minute per IP
-- 1000 requests per hour per authenticated user
-- Custom tasks limited to 10 concurrent executions
+## Text classification
 
-## Response Formats
+### `POST /classify`
 
-### Successful Response
+Runs a Hugging Face `text-classification` pipeline. The pipeline for each
+model is built on first use and then cached for the life of the process, on
+the device chosen by `INFERENCE_DEVICE`. The model does not need to be
+downloaded or loaded first: a Hub model is downloaded on the first request.
+
+Request:
+
 ```json
 {
-  "success": true,
-  "data": { ... },
-  "message": "Operation completed successfully"
+  "texts": ["I love this.", "This is terrible."],
+  "model": "distilbert-base-uncased-finetuned-sst-2-english"
 }
 ```
 
-### Error Response
+| Field | Type | Rules |
+|---|---|---|
+| `texts` | array of strings | 1 to 128 items; each 1 to 12,000 characters and not only whitespace |
+| `model` | string, optional | Hub id, or a directory inside the container. Default `distilbert-base-uncased-finetuned-sst-2-english` |
+
+Response, one result per input text, in the same order:
+
 ```json
 {
-  "success": false,
-  "error": "Error description",
-  "status_code": 400
+  "results": [
+    {"label": "POSITIVE", "score": 0.9998},
+    {"label": "NEGATIVE", "score": 0.9997}
+  ]
 }
 ```
 
-## WebSocket Endpoints
+`label` is the top label from the model's `id2label`; `score` is its
+probability. Texts longer than the model's maximum length (512 tokens for
+BERT-style models) are truncated.
 
-### Real-time Task Updates
-```
-ws://localhost:8000/ws/tasks/{task_id}
+Errors:
+
+| Status | When |
+|---|---|
+| `422` | A limit above is broken, or the body is not valid JSON |
+| `400` | The model cannot be loaded or is not a sequence classifier; `detail` says why |
+
+See the [corpus scoring guide](corpus-scoring.md) for batching large inputs.
+
+## Embeddings
+
+### `POST /embed` and `POST /embed/batch`
+
+Both take the same body and return mean-pooled last-layer embeddings, one
+vector per text.
+
+```json
+{"texts": ["first text", "second text"], "model": "bert-base-uncased"}
 ```
 
-### Model Download Progress
+```json
+{"embeddings": [[0.0123, -0.0456, ...], [0.0789, ...]]}
 ```
-ws://localhost:8000/ws/download/{download_id}
+
+Unlike `/classify`, the model must first be downloaded and loaded with
+`POST /models/download` and `POST /models/load` (or from the web interface).
+Otherwise the response is `400` with a message saying which step is missing.
+
+## Other pipelines
+
+Each of these takes one text per request and builds the pipeline on every
+call, so they suit interactive use rather than bulk jobs.
+
+| Method and path | Request | Response | Default model |
+|---|---|---|---|
+| `POST /qa` | `{"question", "context", "model"?}` | `{"answer", "score", "start", "end"}` | `bert-large-uncased-whole-word-masking-finetuned-squad` |
+| `POST /ner` | `{"text", "model"?}` | `{"entities": [...]}` | `dslim/bert-base-NER` |
+| `POST /fill-mask` | `{"text", "model"?}` (text contains `[MASK]`) | `{"results": [...]}` | `bert-base-uncased` |
+| `POST /summarize` | `{"text", "model"?}` | `{"summary": "..."}` | `facebook/bart-large-cnn` |
+| `POST /features` | `{"text", "model"?}` | `{"features": [...]}` | `bert-base-uncased` |
+
+## Custom tasks
+
+A custom task is three snippets of Python run by the backend: tokenizer code,
+model code, and a function named `custom_function`. Anyone who can call these
+endpoints can run code on the server; see [security.md](security.md).
+
+### `POST /custom-task`
+
+```json
+{
+  "model_id": "distilbert-base-uncased-finetuned-sst-2-english",
+  "tokenizer_code": "tokenizer = AutoTokenizer.from_pretrained(model_id)",
+  "model_code": "model = AutoModelForSequenceClassification.from_pretrained(model_id)",
+  "function_code": "def custom_function(text):\n    inputs = tokenizer(text, return_tensors='pt', truncation=True)\n    probs = torch.softmax(model(**inputs).logits, dim=-1)[0]\n    return {model.config.id2label[i]: float(p) for i, p in enumerate(probs)}",
+  "input_text": "I love this."
+}
 ```
+
+```json
+{"result": {"NEGATIVE": 0.0002, "POSITIVE": 0.9998}, "error": null}
+```
+
+Errors in the code come back as `{"result": null, "error": "..."}` with
+status 200.
+
+### `POST /custom-task/batch`
+
+Same as above with `input_texts` (an array) instead of `input_text`.
+`custom_function` receives the whole list and must return a list of the same
+length. Response: `{"results": [...], "errors": [...]}`.
+
+### Saved tasks
+
+Tasks can be stored in MongoDB and shared between installations.
+
+| Method and path | What it does |
+|---|---|
+| `POST /custom-tasks` | Save a task: `{"name", "description", "model_id", "tokenizer_code", "model_code", "function_code", "tags"?, "batch_mode"?}` |
+| `GET /custom-tasks` | List saved tasks |
+| `GET /custom-tasks/{id}` | Get one task |
+| `PUT /custom-tasks/{id}` | Replace a task (same body as saving) |
+| `DELETE /custom-tasks/{id}` | Delete a task |
+| `GET /custom-tasks/search/{query}` | Search by name, description and tags |
+| `GET /custom-tasks/model/{model_id}` | Tasks for one model |
+| `GET /custom-tasks/tags/{tags}` | Tasks with any of the comma-separated tags |
+| `POST /custom-tasks/import` | Import tasks from an export |
+
+## Model management
+
+These manage the Hugging Face cache and the in-memory models used by
+`/embed`. `/classify` does not need them.
+
+| Method and path | Body or query | What it does |
+|---|---|---|
+| `GET /models/available` | `?search=&tag=` | Search the Hub for BERT text-classification models (up to 500) |
+| `POST /models/download` | `{"model_id"}` | Start a background download |
+| `GET /models/downloaded` | none | Downloads in progress and models in the cache, with sizes |
+| `DELETE /models/downloaded` | `?author=&model=` | Remove a model from memory and the cache |
+| `POST /models/load` | `{"model_id"}` | Load a downloaded model into memory, in the background |
+| `GET /models/loading` | none | Load progress and errors |
+| `GET /models/loaded` | none | Models in memory |
+
+## Settings and statistics
+
+| Method and path | What it does |
+|---|---|
+| `GET /settings`, `POST /settings` | Web interface settings. Kept in memory only; reset on restart |
+| `GET /stats` | Counters shown on the dashboard |
+| `GET /status` | `{"message": "Backend is running!"}` |
