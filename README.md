@@ -79,7 +79,7 @@ curl -s http://127.0.0.1:4794/classify \
 ```
 
 ```json
-{"results":[{"label":"POSITIVE","score":0.9998},{"label":"NEGATIVE","score":0.9997}]}
+{"results":[{"label":"POSITIVE","score":0.9998741149902344},{"label":"NEGATIVE","score":0.9996345043182373}]}
 ```
 
 ## Scoring a corpus
@@ -106,7 +106,7 @@ Input, one object per line:
 Output, appended one line per scored row:
 
 ```json
-{"id": "r1", "label": "POSITIVE", "score": 0.999855, "positive_score": 0.999855, "model": "distilbert-base-uncased-finetuned-sst-2-english"}
+{"id": "r1", "label": "POSITIVE", "score": 0.999845, "positive_score": 0.999845, "model": "distilbert-base-uncased-finetuned-sst-2-english"}
 ```
 
 If the script stops (Ctrl-C, a crash, a server restart), run the same command

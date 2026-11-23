@@ -162,8 +162,8 @@ endpoints can run code on the server; see [security.md](security.md).
 ```json
 {
   "model_id": "distilbert-base-uncased-finetuned-sst-2-english",
-  "tokenizer_code": "tokenizer = AutoTokenizer.from_pretrained(model_id)",
-  "model_code": "model = AutoModelForSequenceClassification.from_pretrained(model_id)",
+  "tokenizer_code": "from transformers import AutoTokenizer\ntokenizer = AutoTokenizer.from_pretrained(model_id)",
+  "model_code": "from transformers import AutoModelForSequenceClassification\nmodel = AutoModelForSequenceClassification.from_pretrained(model_id)",
   "function_code": "def custom_function(text):\n    inputs = tokenizer(text, return_tensors='pt', truncation=True)\n    probs = torch.softmax(model(**inputs).logits, dim=-1)[0]\n    return {model.config.id2label[i]: float(p) for i, p in enumerate(probs)}",
   "input_text": "I love this."
 }
@@ -172,6 +172,16 @@ endpoints can run code on the server; see [security.md](security.md).
 ```json
 {"result": {"NEGATIVE": 0.0002, "POSITIVE": 0.9998}, "error": null}
 ```
+
+The variable `model_id` holds the request's `model_id`. `torch`,
+`transformers`, `AutoTokenizer`, `AutoModel`,
+`AutoModelForSequenceClassification` and `pipeline` are already defined.
+
+Each snippet that contains the word `import` or `from` anywhere (including
+inside `from_pretrained`) must also contain an explicit
+`import torch` / `from transformers import ...` line, or it is rejected with
+"Only 'transformers' and 'torch' imports are allowed". That is why the
+example imports names that are already defined.
 
 Errors in the code come back as `{"result": null, "error": "..."}` with
 status 200.
@@ -196,7 +206,9 @@ Tasks can be stored in MongoDB and shared between installations.
 | `GET /custom-tasks/search/{query}` | Search by name, description and tags |
 | `GET /custom-tasks/model/{model_id}` | Tasks for one model |
 | `GET /custom-tasks/tags/{tags}` | Tasks with any of the comma-separated tags |
+| `GET /custom-tasks/export` | All tasks as a JSON array, for importing elsewhere |
 | `POST /custom-tasks/import` | Import tasks from an export |
+| `GET /custom-tasks/stats` | Task counts and popular tags |
 
 ## Model management
 
