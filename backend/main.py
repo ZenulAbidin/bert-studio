@@ -1171,6 +1171,30 @@ def get_custom_tasks(session=Depends(api_key_or_login_required)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to get tasks: {str(e)}")
 
+# Fixed paths must be registered before /custom-tasks/{task_id}, which would
+# otherwise match them.
+@app.get("/custom-tasks/export", response_model=List[Dict[str, Any]])
+def export_custom_tasks(session=Depends(api_key_or_login_required)):
+    """
+    Export all custom tasks as JSON.
+    """
+    try:
+        return mongodb_manager.export_tasks()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to export tasks: {str(e)}")
+
+
+@app.get("/custom-tasks/stats")
+def get_task_stats(session=Depends(api_key_or_login_required)):
+    """
+    Get statistics about custom tasks.
+    """
+    try:
+        return mongodb_manager.get_task_stats()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get task stats: {str(e)}")
+
+
 @app.get("/custom-tasks/{task_id}", response_model=TaskInfo)
 def get_custom_task(task_id: str, session=Depends(api_key_or_login_required)):
     """
@@ -1290,16 +1314,6 @@ def get_tasks_by_model(model_id: str, session=Depends(api_key_or_login_required)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to get tasks for model: {str(e)}")
 
-@app.get("/custom-tasks/export", response_model=List[Dict[str, Any]])
-def export_custom_tasks(session=Depends(api_key_or_login_required)):
-    """
-    Export all custom tasks as JSON.
-    """
-    try:
-        return mongodb_manager.export_tasks()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to export tasks: {str(e)}")
-
 @app.post("/custom-tasks/import", response_model=MessageResponse)
 def import_custom_tasks(request: ImportTasksRequest, session=Depends(api_key_or_login_required)):
     """
@@ -1310,16 +1324,6 @@ def import_custom_tasks(request: ImportTasksRequest, session=Depends(api_key_or_
         return {"message": f"Successfully imported {len(created_ids)} tasks"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to import tasks: {str(e)}")
-
-@app.get("/custom-tasks/stats")
-def get_task_stats(session=Depends(api_key_or_login_required)):
-    """
-    Get statistics about custom tasks.
-    """
-    try:
-        return mongodb_manager.get_task_stats()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get task stats: {str(e)}")
 
 @app.get("/custom-tasks/tags/{tags}")
 def get_tasks_by_tags(tags: str, session=Depends(api_key_or_login_required)):
