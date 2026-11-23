@@ -2,7 +2,7 @@
 FROM node:22 AS frontend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci
 COPY ./src ./src
 COPY ./public ./public
 COPY vite.config.ts ./
@@ -18,8 +18,9 @@ WORKDIR /app
 #   --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 ARG TORCH_INDEX_URL=
 COPY backend/requirements.txt ./backend/requirements.txt
+# torch alone comes from that index; its dependencies come from PyPI below.
 RUN if [ -n "$TORCH_INDEX_URL" ]; then \
-        pip install --no-cache-dir torch --index-url "$TORCH_INDEX_URL"; \
+        pip install --no-cache-dir --no-deps torch --index-url "$TORCH_INDEX_URL"; \
     fi \
     && pip install --no-cache-dir -r ./backend/requirements.txt
 
