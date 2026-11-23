@@ -1,8 +1,11 @@
-version: "3.8"
-
 services:
   backend:
-    build: .
+    build:
+      context: .
+      args:
+        # Set TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu for a
+        # CPU-only image. Leave it empty for the default CUDA build.
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-}
     container_name: bert-backend
     env_file:
       - ./backend/.env.local
@@ -14,6 +17,12 @@ services:
     volumes:
       - model_cache:/models
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4794/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     # Uncomment if you want to mount code for live reload in dev
     # volumes:
     #   - ./backend:/app/backend
