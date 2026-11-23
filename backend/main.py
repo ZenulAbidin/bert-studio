@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request, Path, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, RootModel, Field
+from pydantic import BaseModel, RootModel, Field, ValidationError
 from typing import List, Optional, Dict, Any
 import torch
 import transformers
@@ -8,6 +8,7 @@ from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassific
 from huggingface_hub import HfApi, hf_hub_download, hf_hub_url, get_hf_file_metadata, scan_cache_dir
 import time
 import os
+import json
 import numpy as np
 from mongodb_database import mongodb_manager, CustomTask
 from datetime import datetime
@@ -123,13 +124,37 @@ def inference_device() -> int:
     return -1
 
 
-def classifier_for(model_id: str) -> Pipeline:
+def classifier_for(model_id: str, *, force_cpu: bool = False) -> Pipeline:
     """Cache a sequence-classification pipeline instead of rebuilding per request."""
-    if model_id not in classification_pipelines:
-        classification_pipelines[model_id] = pipeline(
-            "text-classification", model=model_id, tokenizer=model_id, device=inference_device()
+    device = -1 if force_cpu else inference_device()
+    cache_key = f"{model_id}@{'cpu' if device == -1 else 'cuda'}"
+    if cache_key not in classification_pipelines:
+        classification_pipelines[cache_key] = pipeline(
+            "text-classification", model=model_id, tokenizer=model_id, device=device
         )
-    return classification_pipelines[model_id]
+    return classification_pipelines[cache_key]
+
+
+def well_formed_text(value: str) -> str:
+    """Replace lone UTF-16 surrogate code points before tokenization."""
+    return "".join(
+        "\ufffd" if 0xD800 <= ord(character) <= 0xDFFF else character
+        for character in value
+    )
+
+
+def well_formed_json(value: Any) -> Any:
+    """Recursively make strings safe before Pydantic and UTF-8 encoding."""
+    if isinstance(value, str):
+        return well_formed_text(value)
+    if isinstance(value, list):
+        return [well_formed_json(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            well_formed_text(key) if isinstance(key, str) else key: well_formed_json(item)
+            for key, item in value.items()
+        }
+    return value
 
 # --- Helper Functions ---
 def _get_model_size(model_id: str) -> int:
@@ -419,13 +444,15 @@ def api_key_or_login_required(request: Request, authorization: str = Header(None
 
 
 def talksearch_worker_or_login_required(
-    request: Request, x_internal_scorer_token: Optional[str] = Header(None)
+    request: Request,
+    x_internal_scorer_token: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Permit only the configured local batch worker to bypass interactive login."""
     expected = os.getenv("INTERNAL_SCORER_TOKEN")
     if expected and x_internal_scorer_token and secrets.compare_digest(expected, x_internal_scorer_token):
         return {"internal_worker": True}
-    return api_key_or_login_required(request)
+    return api_key_or_login_required(request, authorization)
 
 @app.get("/status", response_model=HealthResponse)
 def read_status():
@@ -735,19 +762,37 @@ class TalkSearchScoreRequest(BaseModel):
 
 
 @app.post("/talksearch/score")
-def score_talksearch_posts(
-    request: TalkSearchScoreRequest, session=Depends(talksearch_worker_or_login_required)
+async def score_talksearch_posts(
+    http_request: Request, session=Depends(talksearch_worker_or_login_required)
 ):
     """Score posts for a review queue using the configured sequence classifier.
 
     ``machine_score`` is a model probability, not a declaration of authorship.
     The positive label is explicit because label ordering differs between models.
     """
-    model_id = request.model or Config.AI_DETECTOR_MODEL
     try:
-        results = classifier_for(model_id)([post.content for post in request.posts], truncation=True)
+        payload = well_formed_json(await http_request.json())
+        request = TalkSearchScoreRequest.model_validate(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Request body is not valid JSON") from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=well_formed_json(exc.errors())) from exc
+
+    model_id = request.model or Config.AI_DETECTOR_MODEL
+    texts = [post.content for post in request.posts]
+    try:
+        results = classifier_for(model_id)(texts, truncation=True)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Unable to run {model_id}: {exc}")
+        # Another process on the same GPU can legitimately occupy most VRAM.
+        # Keep the scorer useful in that state instead of failing every batch;
+        # CPU inference is slower but still returns model scores.
+        if torch.cuda.is_available():
+            try:
+                results = classifier_for(model_id, force_cpu=True)(texts, truncation=True)
+            except Exception as cpu_exc:
+                raise HTTPException(status_code=400, detail=f"Unable to run {model_id}: GPU: {exc}; CPU fallback: {cpu_exc}")
+        else:
+            raise HTTPException(status_code=400, detail=f"Unable to run {model_id}: {exc}")
     positive = Config.AI_DETECTOR_POSITIVE_LABEL.casefold()
     scored = []
     for post, result in zip(request.posts, results):
