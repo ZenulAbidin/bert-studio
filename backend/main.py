@@ -1475,6 +1475,9 @@ def get_captcha(request: Request):
     set_session(response, session)
     return response
 
+# The web interface posts to /api/login; the Caddy proxy strips /api, so the
+# backend sees /login. Keep /api/login for clients that call the backend directly.
+@app.post("/login")
 @app.post("/api/login")
 async def login(request: Request):
     body = await request.json()
