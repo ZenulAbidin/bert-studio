@@ -1,9 +1,9 @@
 http://:4793 {
     handle_path /api/* {
-        reverse_proxy backend:4794
+        reverse_proxy bert-backend:4794
     }
 
     handle {
-        reverse_proxy backend:4794
+        reverse_proxy bert-backend:4794
     }
 }
